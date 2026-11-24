@@ -116,9 +116,9 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     views = {'front':[1,0,0], 'rear':[-1,0,0], 'cab':[0,0,1], 'service':[0,0,-1],
              'top':[0,1,0], 'under':[0,-1,0], 'oblique':[0.7,0.4,1]}
-    poses = {'dig':dict(boom=.49,stick=-1.85,curl=.06),
-             'carry':dict(boom=.72,stick=-2.13,curl=1.37,load=.9),
-             'dump':dict(boom=.94,stick=-1.95,curl=-.62)}
+    poses = {'dig':dict(boom=.37,stick=-1.30,curl=.27),
+             'carry':dict(boom=.72,stick=-1.55,curl=.97,load=.9),
+             'dump':dict(boom=.83,stick=-1.50,curl=-.52)}
     report = {}
     with ThreadingHTTPServer(('127.0.0.1',0), Preview) as server:
         Thread(target=server.serve_forever,daemon=True).start()
@@ -134,11 +134,10 @@ def main():
                     for name,axis in views.items():
                         changed=page.evaluate('p => window.review(p)',{'dir':axis,'pose':pose})
                         report['orderDifferences'][f'{pose_name}-{name}']=changed
-                        if pose_name=='carry' or name=='oblique':
-                            page.screenshot(path=str(OUTPUT/f'{pose_name}-{name}.png'))
-                            if changed:
-                                diff=page.evaluate('window.overlay')
-                                (OUTPUT/f'{pose_name}-{name}-order.png').write_bytes(base64.b64decode(diff))
+                        page.screenshot(path=str(OUTPUT/f'{pose_name}-{name}.png'))
+                        if changed:
+                            diff=page.evaluate('window.overlay')
+                            (OUTPUT/f'{pose_name}-{name}-order.png').write_bytes(base64.b64decode(diff))
                 browser.close()
         finally:
             server.shutdown()

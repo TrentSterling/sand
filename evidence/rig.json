@@ -1,9 +1,17 @@
 {
   "poses": 1485,
-  "maxToothError": 3.978256139440565e-15,
-  "maxLinkError": 2.094764613337708e-15,
-  "meshCount": 35,
-  "triangles": 18618,
+  "maxToothError": 3.607797795906347e-15,
+  "distanceToTooth": 1.4305114759416426e-8,
+  "maxLinkError": 2.0350724194510405e-15,
+  "maxRodPinError": 2.5121479338940403e-15,
+  "meshCount": 36,
+  "triangles": 20186,
+  "envelope": {
+    "minReach": 1.4946531863757497,
+    "maxReach": 8.532720120602928,
+    "minHeight": -2.8953962035200953,
+    "maxHeight": 8.404403808940144
+  },
   "cylinders": [
     {
       "name": "Boom lift -1",
@@ -17,13 +25,94 @@
     },
     {
       "name": "Stick cylinder",
-      "min": 0.42012487003498,
-      "max": 1.256139856758069
+      "min": 0.38194606810022824,
+      "max": 1.3456317255164651
     },
     {
       "name": "Bucket crowd",
-      "min": 0.2637927004434897,
-      "max": 0.9887121101652558
+      "min": 0.11355917001972404,
+      "max": 1.1988514772808612
     }
-  ]
+  ],
+  "driveSweeps": [
+    {
+      "joint": "boom",
+      "intervals": 2048,
+      "minMetresPerRadian": 0.17242672335111695,
+      "maxMetresPerRadian": 0.3921734050698725
+    },
+    {
+      "joint": "stick",
+      "intervals": 2048,
+      "minMetresPerRadian": 0.22704365050892444,
+      "maxMetresPerRadian": 0.5412022858610561
+    },
+    {
+      "joint": "curl",
+      "intervals": 2048,
+      "minMetresPerRadian": 0.24986584410064758,
+      "maxMetresPerRadian": 0.48375903394563385
+    }
+  ],
+  "clearanceSweeps": [
+    {
+      "a": "boom web",
+      "b": "stick web",
+      "poses": 257,
+      "minMetres": 0.0971820018840516
+    },
+    {
+      "a": "boom clevis",
+      "b": "stick web",
+      "poses": 257,
+      "minMetres": 0.018499999999999996
+    },
+    {
+      "a": "stick web",
+      "b": "bucket hanger",
+      "poses": 257,
+      "minMetres": 0.08
+    },
+    {
+      "a": "stick web",
+      "b": "rolled bowl",
+      "poses": 257,
+      "minMetres": 0.09533602368149767
+    },
+    {
+      "a": "rocker strap",
+      "b": "bucket hanger",
+      "poses": 257,
+      "minMetres": 0.00699999999999998
+    },
+    {
+      "a": "rocker strap",
+      "b": "coupler link",
+      "poses": 257,
+      "minMetres": 0.08900000000000001
+    },
+    {
+      "a": "coupler link",
+      "b": "bucket hanger",
+      "poses": 257,
+      "minMetres": 0.004000000000000007
+    }
+  ],
+  "carrierContacts": {
+    "hit": -0.3787589486575048,
+    "centred": 0.13000000000000006,
+    "dig": 3.268116741008193,
+    "carry": 3.002005837231499,
+    "min": -0.3787589486575048,
+    "maxStep": 0.013308289020833919
+  },
+  "massCalibration": {
+    "struckM3": 0.4395864,
+    "heapedM3": 0.55,
+    "largestVolumeError": 1.1626646756468517e-8,
+    "halfCentroids": [
+      -0.021437971775527632,
+      0.06538979770194485
+    ]
+  }
 }

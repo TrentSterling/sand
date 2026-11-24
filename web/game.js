@@ -1,59 +1,22 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createMachine } from './machine.js';
-import { createQuarry } from './quarry.js';
+import { carrierClearance, createMachine, machineDimensions } from './machine.js';
+import { armIK, forward, toolAttitude } from './arm.js';
+import { createSupport } from './support.js';
+import { createQuarry, WEIGH_BAY } from './quarry.js';
 import { createGround, createStream } from './terrain.js';
-import { createTreads } from './treads.js';
+import { createTreads, renderedHeight } from './treads.js';
 
 const byId = (id) => document.getElementById(id);
 const clamp = THREE.MathUtils.clamp,
   mix = THREE.MathUtils.lerp;
-const capacity = 67200,
-  units = 64000,
+const units = 64000,
   step = 1 / 60;
 const note = (text) => {
   byId('feedback').textContent = text;
 };
 const angleDelta = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 const fmt = (v) => (v / units).toFixed(2) + ' m³';
-
-function armIK(r, h, pitch) {
-  const a = 4.45,
-    b = 2.65;
-  const x = r - 0.55 - (0.86 * Math.cos(pitch) + 0.52 * Math.sin(pitch));
-  const y = h - 1.55 - (0.86 * Math.sin(pitch) - 0.52 * Math.cos(pitch));
-  const stick = clamp(
-    -Math.acos(clamp((x * x + y * y - a * a - b * b) / (2 * a * b), -1, 1)),
-    -2.55,
-    -0.35,
-  );
-  const boom = clamp(
-    Math.atan2(y, x) - Math.atan2(b * Math.sin(stick), a + b * Math.cos(stick)),
-    -0.18,
-    1.19,
-  );
-  return { boom, stick, curl: clamp(pitch - boom - stick, -1.15, 2.35) };
-}
-function forward(p) {
-  const middle = p.boom + p.stick,
-    pitch = middle + p.curl;
-  return {
-    r:
-      0.55 +
-      4.45 * Math.cos(p.boom) +
-      2.65 * Math.cos(middle) +
-      0.86 * Math.cos(pitch) +
-      0.52 * Math.sin(pitch),
-    h:
-      1.55 +
-      4.45 * Math.sin(p.boom) +
-      2.65 * Math.sin(middle) +
-      0.86 * Math.sin(pitch) -
-      0.52 * Math.cos(pitch),
-    pitch,
-    yaw: p.yaw,
-  };
-}
 
 function markZone(scene) {
   const points = [];
@@ -82,6 +45,7 @@ async function start() {
   const bytes = Uint8Array.from(atob(byId('wasm').textContent.trim()), (c) => c.charCodeAt(0));
   const { instance } = await WebAssembly.instantiate(bytes);
   const core = instance.exports;
+  const capacity = core.bucket_capacity();
   const renderer = new THREE.WebGLRenderer({
     canvas: byId('view'),
     antialias: true,
@@ -108,6 +72,82 @@ async function start() {
     rig = createMachine(THREE),
     treads = createTreads(THREE, scene);
   scene.add(rig.root);
+  const fitSupport = createSupport();
+  let support,
+    poseError = 0,
+    contactStop = false,
+    sideView = false,
+    dragTarget = null,
+    dragId = null;
+  const orbitOffset = new THREE.Vector3();
+  const cast = new THREE.Raycaster(),
+    armPlane = new THREE.Plane(),
+    touchPoint = new THREE.Vector3();
+  const targetMarker = new THREE.Mesh(
+    new THREE.RingGeometry(0.095, 0.12, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd04f, depthTest: false, side: THREE.DoubleSide }),
+  );
+  targetMarker.visible = false;
+  targetMarker.renderOrder = 5;
+  scene.add(targetMarker);
+  const ground = (x, z) => core.world_ground(w, x, z);
+  const bearing = (x, z) => core.world_bearing(w, x, z);
+  const shoeGround = (x, z) => renderedHeight(bearing, x, z);
+  const probe = new THREE.Vector3();
+  const bucketOutline = [
+    [-0.86, -0.52],
+    [-0.62, -0.6],
+    [0, -0.86],
+    [0.53, -0.64],
+    [0.64, -0.25],
+    [0.38, 0.05],
+  ];
+  function hardClearance(pose) {
+    const k = forward(pose),
+      cs = Math.cos(k.pitch),
+      sn = Math.sin(k.pitch),
+      c = Math.cos(pose.yaw),
+      s = Math.sin(pose.yaw);
+    let gap = carrierClearance(pose);
+    for (const [u, v] of bucketOutline) {
+      const radius = k.wristX + u * cs + v * sn,
+        elevation = k.wristY - u * sn + v * cs;
+      for (const side of [-0.56, 0, 0.56]) {
+        probe.set(radius * c + side * s, elevation, -radius * s + side * c);
+        probe.applyMatrix4(rig.root.matrixWorld);
+        const { x, y, z } = probe,
+          w = WEIGH_BAY;
+        const wall =
+          z >= w.mouth &&
+          z <= w.back + w.wall &&
+          Math.abs(x) <= w.right + w.wall &&
+          (Math.abs(x) >= w.right || z >= w.back);
+        gap = Math.min(gap, y - (wall ? w.height : 0));
+      }
+    }
+    return gap;
+  }
+  function protectTool(old) {
+    if (old.boom === p.boom && old.stick === p.stick && old.curl === p.curl && old.yaw === p.yaw)
+      return;
+    contactStop = false;
+    const margin = hardClearance(p);
+    if (margin >= 0 || margin >= hardClearance(old)) return;
+    const goal = { ...p };
+    let good = 0,
+      bad = 1;
+    const floor = Math.min(0, hardClearance(old));
+    for (let i = 0; i < 9; i++) {
+      const t = (good + bad) / 2;
+      for (const joint of ['boom', 'stick', 'curl', 'yaw'])
+        p[joint] = mix(old[joint], goal[joint], t);
+      if (hardClearance(p) >= floor) good = t;
+      else bad = t;
+    }
+    for (const joint of ['boom', 'stick', 'curl', 'yaw'])
+      p[joint] = mix(old[joint], goal[joint], good);
+    contactStop = true;
+  }
   const marked = markZone(scene),
     tip = new THREE.Vector3();
   let w = 0,
@@ -141,7 +181,7 @@ async function start() {
     availableTorque = 1;
   const keyHeld = new Set(),
     pointerHeld = new Map();
-  const replay = new Float32Array(9 * 3600);
+  const replay = new Float32Array(12 * 3600);
   let trackMoved = false;
   const source = { x: 5.45, z: -0.15 },
     bay = { x: 0, z: 5.55 },
@@ -177,6 +217,7 @@ async function start() {
       aspect = width / height;
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
     renderer.setSize(width, height, false);
+    scene.userData.renderHeight = renderer.domElement.height;
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     const factor = clamp(1.02 / aspect, 1, 2.25);
@@ -187,7 +228,10 @@ async function start() {
         .add(new THREE.Vector3(8.7, 6.5, 12.3).multiplyScalar(factor));
       controls.update();
     } else if (factor !== framing) {
-      camera.position.sub(controls.target).multiplyScalar(factor / framing).add(controls.target);
+      camera.position
+        .sub(controls.target)
+        .multiplyScalar(factor / framing)
+        .add(controls.target);
       controls.update();
     }
     framing = factor;
@@ -201,6 +245,10 @@ async function start() {
   }
   function setManual(on) {
     if (busy) return;
+    if (!on && sideView) toggleCutView();
+    endDrag();
+    poseError = 0;
+    contactStop = false;
     manual = on;
     byId('manualPanel').hidden = !on;
     byId('assistPanel').hidden = on;
@@ -225,6 +273,7 @@ async function start() {
       .forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.action === name)));
   }
   function setPause(on) {
+    if (on) endDrag();
     paused = on;
     accum = 0;
     byId('pause').textContent = on ? 'Resume' : 'Pause';
@@ -236,6 +285,7 @@ async function start() {
       return;
     }
     if (w) core.world_drop(w);
+    if (sideView) toggleCutView();
     w = core.world_new(0);
     base = { x: 0, y: 0, z: 0 };
     trackYaw = 0;
@@ -282,9 +332,10 @@ async function start() {
     hud();
   }
   function aimed(target) {
-    const x = target.x - base.x,
-      z = target.z - base.z;
-    return { r: Math.hypot(x, z), yaw: -Math.atan2(z, x) - trackYaw };
+    const local = rig.root.worldToLocal(
+      new THREE.Vector3(target.x, target.y ?? ground(target.x, target.z), target.z),
+    );
+    return { r: Math.hypot(local.x, local.z), h: local.y, yaw: -Math.atan2(local.z, local.x) };
   }
   function queue(name) {
     if (busy) return;
@@ -297,15 +348,25 @@ async function start() {
     let goals;
     switch (name) {
       case 'dig': {
-        const high = core.world_ground(w, source.x, source.z);
-        const cut = Math.max(0.035, high * 0.26);
+        const angle = Math.atan2(source.z - base.z, source.x - base.x);
+        const radial = Math.hypot(source.x - base.x, source.z - base.z);
+        const face = (offset, depth) => {
+          const x = base.x + (radial + offset) * Math.cos(angle),
+            z = base.z + (radial + offset) * Math.sin(angle);
+          return aimed({ x, z, y: Math.max(0.18, renderedHeight(ground, x, z) - depth) });
+        };
+        const entry = face(0.5, 0.12),
+          middle = face(-0.43, 0.31),
+          exit = face(-1.57, 0.26);
         goals = [
-          make(start.r, Math.max(start.h, 2.55), -0.22, start.yaw, 32),
-          make(bank.r + 1.05, Math.max(2.8, high + 0.5), -0.82, bank.yaw, 78),
-          make(bank.r + 0.56, cut, -0.85, bank.yaw, 55),
-          make(Math.max(2.3, bank.r - 1.42), cut + 0.045, 0.46, bank.yaw, 73),
+          make(start.r, Math.max(start.h, 2.7), start.pitch, start.yaw, 32),
+          make(entry.r, entry.h + 0.64, -0.85, entry.yaw, 75),
+          make(entry.r, entry.h, -0.85, entry.yaw, 30),
+          make(middle.r, middle.h, -0.17, middle.yaw, 52),
+          make(exit.r, exit.h, 0.55, exit.yaw, 68),
+          { ...make(exit.r - 0.12, exit.h + 0.85, 0.52, exit.yaw, 42), breakout: true },
         ];
-        note('Teeth down. Watch the cut as the stick draws in.');
+        note('Cutting a slice off the face. Watch the lip curl toward the tracks.');
         break;
       }
       case 'lift':
@@ -341,6 +402,25 @@ async function start() {
   }
   function animateArm() {
     if (!sequence.length) return;
+    if (
+      action === 'dig' &&
+      sequence.length <= 3 &&
+      !sequence[0].breakout &&
+      core.world_load(w) >= capacity * 0.965
+    ) {
+      // A full bucket breaks out along the cut face while the stick draws in.
+      const here = forward(p);
+      sequence = [
+        {
+          r: here.r - 0.32,
+          h: here.h + 0.95,
+          pitch: 0.5,
+          yaw: here.yaw,
+          ticks: 48,
+          breakout: true,
+        },
+      ];
+    }
     const s = sequence[0];
     if (!s.begin) {
       s.begin = forward(p);
@@ -350,9 +430,28 @@ async function start() {
     const t = Math.min(1, s.elapsed / s.ticks),
       f = t * t * (3 - 2 * t),
       a = s.begin;
-    Object.assign(p, armIK(mix(a.r, s.r, f), mix(a.h, s.h, f), mix(a.pitch, s.pitch, f)));
-    p.yaw = a.yaw + angleDelta(a.yaw, s.yaw) * f;
-    if (t === 1) {
+    const r = mix(a.r, s.r, f),
+      h = mix(a.h, s.h, f),
+      pitch = mix(a.pitch, s.pitch, f);
+    const goal = armIK(r, h, pitch);
+    const speed = availableTorque;
+    for (const [joint, rate] of [
+      ['boom', 0.016],
+      ['stick', 0.023],
+      ['curl', 0.033],
+    ]) {
+      p[joint] += clamp(goal[joint] - p[joint], -rate * speed, rate * speed);
+    }
+    p.yaw += clamp(angleDelta(p.yaw, a.yaw + angleDelta(a.yaw, s.yaw) * f), -0.023, 0.023);
+    const achieved = forward(p);
+    poseError = Math.hypot(achieved.r - r, achieved.h - h);
+    const atStops =
+      Math.max(
+        Math.abs(p.boom - goal.boom),
+        Math.abs(p.stick - goal.stick),
+        Math.abs(p.curl - goal.curl),
+      ) < 0.001;
+    if (t === 1 && (contactStop || (atStops && Math.abs(angleDelta(p.yaw, s.yaw)) < 0.006))) {
       sequence.shift();
       if (!sequence.length) {
         const load = core.world_load(w);
@@ -365,6 +464,12 @@ async function start() {
         if (action === 'lift') note('Bucket up. Swing to the delivery point.');
         if (action === 'swing') note('Over the target. Dump when ready.');
         if (action === 'dump' && !done) note('Load released. Dig again for another pass.');
+        if (poseError > 0.1 || contactStop)
+          note(
+            contactStop
+              ? 'Tool at hard contact. Raise the boom or draw the stick back.'
+              : 'Joint stop reached. Choose a closer point or reposition the tracks.',
+          );
         action = '';
         select('');
       }
@@ -387,9 +492,25 @@ async function start() {
   function moveManual() {
     const held = (k) => keyHeld.has(k) || [...pointerHeld.values()].includes(k);
     const axis = (a, b) => Number(held(a)) - Number(held(b));
-    p.boom = clamp(p.boom + axis('boomUp', 'boomDown') * 0.012, -0.18, 1.19);
-    p.stick = clamp(p.stick + axis('stickOut', 'stickIn') * 0.017 * availableTorque, -2.55, -0.35);
-    p.curl = clamp(p.curl + axis('curlIn', 'curlOut') * 0.026 * availableTorque, -1.15, 2.35);
+    const curlInput = axis('curlIn', 'curlOut') * 0.026 * availableTorque;
+    if (dragTarget) {
+      dragTarget.pitch = clamp(dragTarget.pitch + curlInput, -3.1, 2.9);
+      const want = armIK(dragTarget.r, dragTarget.h, dragTarget.pitch);
+      for (const [joint, rate] of [
+        ['boom', 0.014],
+        ['stick', 0.022],
+        ['curl', 0.032],
+      ]) {
+        p[joint] += clamp(want[joint] - p[joint], -rate * availableTorque, rate * availableTorque);
+      }
+    } else {
+      p.boom = clamp(p.boom + axis('boomUp', 'boomDown') * 0.012, ...machineDimensions.limits.boom);
+      p.stick = clamp(
+        p.stick + axis('stickOut', 'stickIn') * 0.017 * availableTorque,
+        ...machineDimensions.limits.stick,
+      );
+      p.curl = clamp(p.curl + curlInput, ...machineDimensions.limits.curl);
+    }
     p.yaw += axis('left', 'right') * 0.018;
     const turn = axis('steerLeft', 'steerRight') * 0.012;
     trackYaw += turn;
@@ -405,17 +526,9 @@ async function start() {
     trackMoved ||= turn !== 0;
   }
   function updateMachine() {
-    const c = Math.cos(trackYaw),
-      s = Math.sin(trackYaw);
-    const sample = (f, l) => core.world_ground(w, base.x + c * f + s * l, base.z - s * f + c * l);
-    const fl = sample(1.55, -1.06),
-      fr = sample(1.55, 1.06),
-      bl = sample(-1.55, -1.06),
-      br = sample(-1.55, 1.06);
-    const gx = (fl + fr + bl + br) * 0.25;
-    base.y = Math.abs(base.y - gx) < 0.001 ? gx : mix(base.y, gx, 0.15);
-    const rise = clamp(Math.atan2(fl + fr - bl - br, 6.2), -0.38, 0.38);
-    const roll = clamp(Math.atan2(fl + bl - fr - br, 4.24), -0.32, 0.32);
+    support = fitSupport(base.x, base.z, trackYaw, shoeGround);
+    const { rise, roll } = support;
+    base.y = support.y;
     const load = core.world_load(w) / capacity;
     const key = [
       p.boom,
@@ -449,15 +562,23 @@ async function start() {
   }
   function tick() {
     const prev = forward(p);
+    const previousPose = { ...p };
     trackMoved = false;
     if (sequence.length) animateArm();
     if (manual) moveManual();
+    protectTool(previousPose);
+    if (dragTarget) {
+      const achieved = forward(p);
+      poseError = Math.hypot(achieved.r - dragTarget.r, achieved.h - dragTarget.h);
+      targetMarker.material.color.setHex(poseError > 0.15 || contactStop ? 0xf07b46 : 0xb4e47c);
+    }
     updateMachine();
-    const e = rig.bucket.matrixWorld.elements;
-    const pitch = Math.atan2(e[1], Math.hypot(e[0], e[2])),
-      yaw = -Math.atan2(e[2], e[0]);
+    const { pitch, yaw } = toolAttitude(rig.bucket.matrixWorld.elements);
     const now = performance.now();
-    if (trackMoved) core.world_tracks(w, base.x, base.z, trackYaw);
+    const shoeFore = Math.tan(support.rise) / Math.cos(support.roll),
+      shoeLateral = -Math.tan(support.roll);
+    if (trackMoved)
+      core.world_track_contact(w, base.x, base.z, trackYaw, base.y, shoeFore, shoeLateral);
     core.world_tool(w, tip.x, tip.y, tip.z, yaw, pitch);
     core.world_tick(w);
     simMs += performance.now() - now;
@@ -469,7 +590,7 @@ async function start() {
     clock += step;
     maxLoad = Math.max(maxLoad, core.world_load(w));
     if (frame < 3600) {
-      const j = frame * 9;
+      const j = frame * 12;
       replay[j] = tip.x;
       replay[j + 1] = tip.y;
       replay[j + 2] = tip.z;
@@ -479,11 +600,22 @@ async function start() {
       replay[j + 6] = base.x;
       replay[j + 7] = base.z;
       replay[j + 8] = trackYaw;
+      replay[j + 9] = base.y;
+      replay[j + 10] = shoeFore;
+      replay[j + 11] = shoeLateral;
       if (action || manual) savedMotion++;
     }
     frame++;
     if (trackMoved || frame === 1)
-      treads.update(base.x, base.z, trackYaw, (x, z) => core.world_ground(w, x, z));
+      treads.update(base.x, base.z, trackYaw, ground, (x, z) => {
+        const f = (x - base.x) * Math.cos(trackYaw) - (z - base.z) * Math.sin(trackYaw);
+        const l = (x - base.x) * Math.sin(trackYaw) + (z - base.z) * Math.cos(trackYaw);
+        const floor =
+          base.y +
+          (f * Math.tan(support.rise)) / Math.cos(support.roll) -
+          l * Math.tan(support.roll);
+        return floor - renderedHeight(ground, x, z) < 0.085;
+      });
     const moving =
       Math.abs(prev.pitch - pitch) +
       Math.abs(prev.r - forward(p).r) +
@@ -495,6 +627,16 @@ async function start() {
     const qty = Math.max(0, markMass - targetBase);
     byId('delivered').textContent = fmt(job === 2 ? core.world_bay(w) : qty);
     byId('bucketFill').textContent = fmt(core.world_load(w));
+    if (sideView && dragTarget) {
+      note(
+        (contactStop ? 'Hard contact. ' : '') +
+          'Teeth ' +
+          poseError.toFixed(2) +
+          ' m from cursor. Lip ' +
+          Math.round((forward(p).pitch * 180) / Math.PI) +
+          '°.',
+      );
+    }
     byId('simTime').textContent = (simMs / Math.max(1, renderTicks)).toFixed(3) + ' ms';
     byId('visited').textContent = visits.toLocaleString() + ' / 65,536';
     if (!byId('lab').hidden) {
@@ -541,9 +683,17 @@ async function start() {
           const begin = performance.now();
           for (let f = i; f < end; f++) {
             if (actual) {
-              const j = f * 9;
+              const j = f * 12;
               if (replay[j + 5])
-                core.world_tracks(handle, replay[j + 6], replay[j + 7], replay[j + 8]);
+                core.world_track_contact(
+                  handle,
+                  replay[j + 6],
+                  replay[j + 7],
+                  replay[j + 8],
+                  replay[j + 9],
+                  replay[j + 10],
+                  replay[j + 11],
+                );
               core.world_tool(
                 handle,
                 replay[j],
@@ -655,6 +805,88 @@ async function start() {
     terrain.inspect(on);
   };
   byId('manual').onclick = () => setManual(!manual);
+  byId('cutView').onclick = toggleCutView;
+  function endDrag() {
+    dragTarget = null;
+    dragId = null;
+    targetMarker.visible = false;
+    if (sideView) note('Drag to place the teeth. Hold R to curl or F to tip.');
+  }
+  function toggleCutView() {
+    sideView = !sideView;
+    endDrag();
+    controls.enabled = !sideView;
+    const b = byId('cutView');
+    b.setAttribute('aria-pressed', String(sideView));
+    b.textContent = sideView ? 'Orbit view' : 'Cut view';
+    if (sideView) {
+      orbitOffset.copy(camera.position).sub(controls.target);
+      setManual(true);
+      note('Drag in the cut plane to guide the teeth. R curls the bucket and F tips it.');
+      frameCutView();
+    } else {
+      controls.target.set(base.x + 1.15, base.y + 1.5, base.z + 0.9);
+      camera.position.copy(controls.target).add(orbitOffset);
+      controls.update();
+      note('Hold a control to move. Double-click the ground to position the teeth.');
+    }
+  }
+  function frameCutView() {
+    const yaw = p.yaw + trackYaw,
+      c = Math.cos(yaw),
+      s = Math.sin(yaw);
+    const distance = 13.6 * framing;
+    controls.target.set(base.x + 2.25 * c, base.y + 2.1, base.z - 2.25 * s);
+    camera.position.set(
+      controls.target.x + distance * s,
+      controls.target.y + distance * 0.09,
+      controls.target.z + distance * c,
+    );
+    camera.lookAt(controls.target);
+    camera.updateMatrixWorld();
+  }
+  function aimDrag(ev) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    cast.setFromCamera(
+      {
+        x: (2 * (ev.clientX - rect.left)) / rect.width - 1,
+        y: 1 - (2 * (ev.clientY - rect.top)) / rect.height,
+      },
+      camera,
+    );
+    const localAxis = new THREE.Vector3(Math.sin(p.yaw), 0, Math.cos(p.yaw)).transformDirection(
+      rig.root.matrixWorld,
+    );
+    armPlane.setFromNormalAndCoplanarPoint(localAxis, rig.root.position);
+    if (!cast.ray.intersectPlane(armPlane, touchPoint)) return;
+    targetMarker.position.copy(touchPoint);
+    targetMarker.quaternion.copy(camera.quaternion);
+    targetMarker.visible = true;
+    const local = rig.root.worldToLocal(touchPoint.clone());
+    dragTarget = {
+      r: local.x * Math.cos(p.yaw) - local.z * Math.sin(p.yaw),
+      h: local.y,
+      pitch: dragTarget?.pitch ?? forward(p).pitch,
+    };
+  }
+  const canvas = renderer.domElement;
+  canvas.addEventListener('pointerdown', (ev) => {
+    if (!sideView || ev.button !== 0 || busy || paused || dragId !== null) return;
+    ev.preventDefault();
+    if (!manual) setManual(true);
+    sequence = [];
+    action = '';
+    select('');
+    dragId = ev.pointerId;
+    canvas.setPointerCapture(dragId);
+    aimDrag(ev);
+  });
+  canvas.addEventListener('pointermove', (ev) => {
+    if (ev.pointerId === dragId) aimDrag(ev);
+  });
+  canvas.addEventListener('lostpointercapture', (ev) => {
+    if (ev.pointerId === dragId) endDrag();
+  });
   byId('bench').onclick = compare;
   byId('pause').onclick = () => {
     if (!busy) setPause(!paused);
@@ -695,6 +927,7 @@ async function start() {
   });
   document.addEventListener('keyup', (ev) => keyHeld.delete(keyMap[ev.code]));
   const inputsOff = () => {
+    endDrag();
     keyHeld.clear();
     pointerHeld.clear();
     accum = 0;
@@ -703,6 +936,7 @@ async function start() {
   window.addEventListener('blur', inputsOff);
   document.addEventListener('visibilitychange', inputsOff);
   byId('view').addEventListener('dblclick', (ev) => {
+    if (sideView) return;
     if (!manual) setManual(true);
     const rect = byId('view').getBoundingClientRect(),
       cast = new THREE.Raycaster();
@@ -718,11 +952,7 @@ async function start() {
       cast.ray.at(d, hit);
       if (hit.y > core.world_ground(w, hit.x, hit.z)) continue;
       const aim = aimed(hit);
-      if (aim.r > 7.65 || aim.r < 2) {
-        note('Outside arm reach. Drive closer to the cut.');
-        break;
-      }
-      sequence = [{ ...aim, h: hit.y - base.y, pitch: -0.6, ticks: 65 }];
+      sequence = [{ ...aim, pitch: -0.6, ticks: 65 }];
       note('Positioning the cutting edge. Hold Curl to take a bite.');
       break;
     }
@@ -742,6 +972,10 @@ async function start() {
       paused,
       tip: tip.toArray(),
       pose: { ...p },
+      toolPitch: forward(p).pitch,
+      ikError: poseError,
+      hardContact: contactStop,
+      cutView: sideView,
       base: { ...base },
       trackYaw,
       drawCalls: renderer.info.render.calls,
@@ -778,7 +1012,8 @@ async function start() {
       renderer.shadowMap.needsUpdate = true;
       treads.refresh((x, z) => core.world_ground(w, x, z));
     }
-    controls.update();
+    if (sideView) frameCutView();
+    else controls.update();
     renderer.render(scene, camera);
     frameSum += wallTime;
     frameCount++;

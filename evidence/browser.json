@@ -1,26 +1,881 @@
 {
-  "artifact": "index.html",
-  "sha256": "8e5dfca59de83dd9e75e43c15e19e15ee18182dfd9fac7cdad7703aff74dd55a",
-  "browser": "157.0.8103.80",
+  "url": "index.html (local release)",
   "graphics": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
-  "cpu": "Intel Core Ultra 9 285K",
+  "browser": "157.0.8103.80",
   "viewport": [
     1440,
     900
   ],
-  "framePacing": {
-    "frameSamples": 2199,
-    "medianFrameMs": 16.69999999999709,
-    "p95FrameMs": 16.799999999999272
-  },
-  "playerReplay": {
+  "states": [
+    {
+      "command": "dig",
+      "cycle": 1,
+      "frame": 317,
+      "load": 34600,
+      "bay": 0,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.358056016610388,
+        2.5565884549057927,
+        -0.11994649587001069
+      ],
+      "pose": {
+        "boom": 0.779034844104639,
+        "stick": -1.6790936650760035,
+        "curl": 0.7999411790286355,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.5000000000000001,
+      "ikError": 9.930136612989092e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 55,
+      "triangles": 175968,
+      "fps": 60.015003750937645,
+      "simMsPerTick": 0.023076919408944938,
+      "maxLoad": 34600,
+      "markMass": 0,
+      "selected": ""
+    },
+    {
+      "command": "lift",
+      "cycle": 1,
+      "frame": 377,
+      "load": 34600,
+      "bay": 0,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.358056016610391,
+        2.8999999999999995,
+        -0.11994649587001074
+      ],
+      "pose": {
+        "boom": 0.8478081031660553,
+        "stick": -1.6378902663227954,
+        "curl": 0.8499178368432596,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.43999999999999984,
+      "ikError": 8.881784197001252e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 55,
+      "triangles": 175968,
+      "fps": 59.97600959616143,
+      "simMsPerTick": 0.008333345254262289,
+      "maxLoad": 34600,
+      "markMass": 0,
+      "selected": ""
+    },
+    {
+      "command": "swing",
+      "cycle": 1,
+      "frame": 623,
+      "load": 34338,
+      "bay": 0,
+      "massError": 0,
+      "air": 6,
+      "visits": 0,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        1.232347557333924e-15,
+        2.65,
+        5.550000000000001
+      ],
+      "pose": {
+        "boom": 0.5950992306021747,
+        "stick": -1.1037148514588735,
+        "curl": 1.1313843791433011,
+        "yaw": -1.5707963267948966
+      },
+      "toolPitch": 0.43999999999999995,
+      "ikError": 8.881784197001252e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 57,
+      "triangles": 176060,
+      "fps": 52.51312828207044,
+      "simMsPerTick": 0,
+      "maxLoad": 34600,
+      "markMass": 0,
+      "selected": ""
+    },
+    {
+      "command": "dump",
+      "cycle": 1,
+      "frame": 724,
+      "load": 0,
+      "bay": 16715,
+      "massError": 0,
+      "air": 53,
+      "visits": 1024,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        1.232347557333924e-15,
+        2.6499999999999995,
+        5.550000000000001
+      ],
+      "pose": {
+        "boom": 0.9394302924653237,
+        "stick": -1.5437867473355473,
+        "curl": -0.6243564548702236,
+        "yaw": -1.5707963267948966
+      },
+      "toolPitch": -1.22,
+      "ikError": 4.440892098500626e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 176340,
+      "fps": 59.97600959616145,
+      "simMsPerTick": 0,
+      "maxLoad": 34600,
+      "markMass": 8038,
+      "selected": ""
+    },
+    {
+      "command": "dig",
+      "cycle": 2,
+      "frame": 1044,
+      "load": 35200,
+      "bay": 34600,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.3640977646693555,
+        2.250194894606962,
+        -0.12011278251383546
+      ],
+      "pose": {
+        "boom": 0.7222655745634143,
+        "stick": -1.70009034482244,
+        "curl": 0.722175229740974,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.4999999999999998,
+      "ikError": 9.930136612989092e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 55,
+      "triangles": 175968,
+      "fps": 60,
+      "simMsPerTick": 0.009999990463256836,
+      "maxLoad": 35200,
+      "markMass": 34600,
+      "selected": ""
+    },
+    {
+      "command": "lift",
+      "cycle": 2,
+      "frame": 1104,
+      "load": 35200,
+      "bay": 34600,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.364097764669356,
+        2.8999999999999995,
+        -0.12011278251383548
+      ],
+      "pose": {
+        "boom": 0.8468494043816874,
+        "stick": -1.6354184467382198,
+        "curl": 0.8514309576434678,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.44000000000000017,
+      "ikError": 4.440892098500626e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 55,
+      "triangles": 175968,
+      "fps": 59.992500937382665,
+      "simMsPerTick": 0.011111100514729818,
+      "maxLoad": 35200,
+      "markMass": 34600,
+      "selected": ""
+    },
+    {
+      "command": "swing",
+      "cycle": 2,
+      "frame": 1334,
+      "load": 34338,
+      "bay": 34600,
+      "massError": 0,
+      "air": 17,
+      "visits": 0,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        1.232347557333924e-15,
+        2.65,
+        5.550000000000001
+      ],
+      "pose": {
+        "boom": 0.5950992306021747,
+        "stick": -1.1037148514588735,
+        "curl": 1.1313843791433011,
+        "yaw": -1.5707963267948966
+      },
+      "toolPitch": 0.43999999999999995,
+      "ikError": 8.881784197001252e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 57,
+      "triangles": 176248,
+      "fps": 60,
+      "simMsPerTick": 0.012499988079071045,
+      "maxLoad": 35200,
+      "markMass": 34600,
+      "selected": ""
+    },
+    {
+      "command": "dump",
+      "cycle": 2,
+      "frame": 1435,
+      "load": 0,
+      "bay": 53020,
+      "massError": 0,
+      "air": 50,
+      "visits": 1024,
+      "job": 0,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        1.232347557333924e-15,
+        2.6499999999999995,
+        5.550000000000001
+      ],
+      "pose": {
+        "boom": 0.9394302924653237,
+        "stick": -1.5437867473355473,
+        "curl": -0.6243564548702236,
+        "yaw": -1.5707963267948966
+      },
+      "toolPitch": -1.22,
+      "ikError": 4.440892098500626e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 176284,
+      "fps": 60,
+      "simMsPerTick": 0.03333330154418945,
+      "maxLoad": 35200,
+      "markMass": 50426,
+      "selected": ""
+    },
+    {
+      "command": "dig",
+      "cycle": 1,
+      "frame": 1763,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.30986474866015,
+        2.0111591800771085,
+        -0.11862013069706835
+      ],
+      "pose": {
+        "boom": 0.6826312449806331,
+        "stick": -1.7351822613451333,
+        "curl": 0.6474489836354997,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.5,
+      "ikError": 1.9860273225978185e-15,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 60.01500375093806,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 0,
+      "selected": ""
+    },
+    {
+      "command": "lift",
+      "cycle": 1,
+      "frame": 1823,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.309864748660152,
+        2.9000000000000004,
+        -0.1186201306970684
+      ],
+      "pose": {
+        "boom": 0.8554087393335258,
+        "stick": -1.6575110959205972,
+        "curl": 0.8378976434129286,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.44000000000000006,
+      "ikError": 4.440892098500626e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 59.95203836930524,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 0,
+      "selected": ""
+    },
+    {
+      "command": "swing",
+      "cycle": 1,
+      "frame": 2167,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        -4.600000000000001,
+        2.649999999999999,
+        2.700000000000001
+      ],
+      "pose": {
+        "boom": 0.6403612404563692,
+        "stick": -1.2214364819125683,
+        "curl": 1.0589247585438009,
+        "yaw": -2.6108191563868863
+      },
+      "toolPitch": 0.43999999999999995,
+      "ikError": 8.881784197001252e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 60,
+      "simMsPerTick": 0.011111100514729818,
+      "maxLoad": 35200,
+      "markMass": 0,
+      "selected": ""
+    },
+    {
+      "command": "dump",
+      "cycle": 1,
+      "frame": 2267,
+      "load": 0,
+      "bay": 69800,
+      "massError": 0,
+      "air": 55,
+      "visits": 256,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        -4.600000000000001,
+        2.6499999999999995,
+        2.700000000000001
+      ],
+      "pose": {
+        "boom": 0.9787488891871738,
+        "stick": -1.6299553487915956,
+        "curl": -0.6712064596044218,
+        "yaw": -2.6108191563868863
+      },
+      "toolPitch": -1.22,
+      "ikError": 4.440892098500626e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 57,
+      "triangles": 176340,
+      "fps": 60,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 13211,
+      "selected": ""
+    },
+    {
+      "command": "dig",
+      "cycle": 2,
+      "frame": 2631,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 256,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.376019758889932,
+        1.8076200774341724,
+        -0.12044091079513569
+      ],
+      "pose": {
+        "boom": 0.6348290706496864,
+        "stick": -1.7149750445652907,
+        "curl": 0.6198540260843954,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.4999999999999998,
+      "ikError": 1.831026719408895e-15,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 60,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 35200,
+      "selected": ""
+    },
+    {
+      "command": "lift",
+      "cycle": 2,
+      "frame": 2691,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.37601975888993,
+        2.9000000000000004,
+        -0.12044091079513566
+      ],
+      "pose": {
+        "boom": 0.84495379251326,
+        "stick": -1.6305329232790586,
+        "curl": 0.8544208692342012,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.43999999999999995,
+      "ikError": 8.881784197001252e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 60,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 35200,
+      "selected": ""
+    },
+    {
+      "command": "swing",
+      "cycle": 2,
+      "frame": 3035,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        -4.600000000000001,
+        2.649999999999999,
+        2.700000000000001
+      ],
+      "pose": {
+        "boom": 0.6403612404563692,
+        "stick": -1.2214364819125683,
+        "curl": 1.0589247585438009,
+        "yaw": -2.6108191563868863
+      },
+      "toolPitch": 0.43999999999999995,
+      "ikError": 8.881784197001252e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 59.999999999999986,
+      "simMsPerTick": 0.05000007152557373,
+      "maxLoad": 35200,
+      "markMass": 35200,
+      "selected": ""
+    },
+    {
+      "command": "dump",
+      "cycle": 2,
+      "frame": 3135,
+      "load": 0,
+      "bay": 69800,
+      "massError": 0,
+      "air": 51,
+      "visits": 512,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        -4.600000000000001,
+        2.6499999999999995,
+        2.700000000000001
+      ],
+      "pose": {
+        "boom": 0.9787488891871738,
+        "stick": -1.6299553487915956,
+        "curl": -0.6712064596044218,
+        "yaw": -2.6108191563868863
+      },
+      "toolPitch": -1.22,
+      "ikError": 4.440892098500626e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 57,
+      "triangles": 176280,
+      "fps": 61.18546845124284,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 44576,
+      "selected": ""
+    },
+    {
+      "command": "dig",
+      "cycle": 3,
+      "frame": 3497,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 768,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.338635211262996,
+        1.703096265440381,
+        -0.11941197829164207
+      ],
+      "pose": {
+        "boom": 0.6175490509364889,
+        "stick": -1.732656341872272,
+        "curl": 0.5848927090642169,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.5,
+      "ikError": 2.220446049250313e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 60,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 70400,
+      "selected": ""
+    },
+    {
+      "command": "lift",
+      "cycle": 3,
+      "frame": 3557,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        4.338635211262996,
+        2.899999999999999,
+        -0.11941197829164207
+      ],
+      "pose": {
+        "boom": 0.8508809699548956,
+        "stick": -1.6458175853289778,
+        "curl": 0.8450633846259179,
+        "yaw": 0.027515989285454415
+      },
+      "toolPitch": 0.44000000000000017,
+      "ikError": 9.930136612989092e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 60,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 70400,
+      "selected": ""
+    },
+    {
+      "command": "swing",
+      "cycle": 3,
+      "frame": 3901,
+      "load": 35200,
+      "bay": 69800,
+      "massError": 0,
+      "air": 0,
+      "visits": 0,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        -4.600000000000001,
+        2.649999999999999,
+        2.700000000000001
+      ],
+      "pose": {
+        "boom": 0.6403612404563692,
+        "stick": -1.2214364819125683,
+        "curl": 1.0589247585438009,
+        "yaw": -2.6108191563868863
+      },
+      "toolPitch": 0.43999999999999995,
+      "ikError": 8.881784197001252e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 56,
+      "triangles": 175968,
+      "fps": 60.01500375093644,
+      "simMsPerTick": 0,
+      "maxLoad": 35200,
+      "markMass": 70400,
+      "selected": ""
+    },
+    {
+      "command": "dump",
+      "cycle": 3,
+      "frame": 4001,
+      "load": 0,
+      "bay": 69800,
+      "massError": 0,
+      "air": 45,
+      "visits": 512,
+      "job": 1,
+      "done": false,
+      "action": "",
+      "manual": false,
+      "paused": false,
+      "tip": [
+        -4.600000000000001,
+        2.6499999999999995,
+        2.700000000000001
+      ],
+      "pose": {
+        "boom": 0.9787488891871738,
+        "stick": -1.6299553487915956,
+        "curl": -0.6712064596044218,
+        "yaw": -2.6108191563868863
+      },
+      "toolPitch": -1.22,
+      "ikError": 4.440892098500626e-16,
+      "hardContact": false,
+      "cutView": false,
+      "base": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trackYaw": 0,
+      "drawCalls": 57,
+      "triangles": 176148,
+      "fps": 60.01500375093644,
+      "simMsPerTick": 0.01818182251670144,
+      "maxLoad": 35200,
+      "markMass": 79197,
+      "selected": ""
+    }
+  ],
+  "benchmark": {
     "source": "Your dig",
-    "ticks": 771,
-    "sparseMs": 2.0999999046325684,
-    "denseMs": 59.99999976158142,
+    "ticks": 1466,
+    "sparseMs": 2.1999995708465576,
+    "denseMs": 114.7000002861023,
     "pairs": [
-      344704,
-      25165568
+      266880,
+      47850496
     ],
     "match": true,
     "massError": 0
@@ -28,8 +883,8 @@
   "avalanche": {
     "source": "Quarry-wide avalanche",
     "ticks": 360,
-    "sparseMs": 20.40000009536743,
-    "denseMs": 38.10000038146973,
+    "sparseMs": 20.299999475479126,
+    "denseMs": 38.200000286102295,
     "pairs": [
       4395744,
       11750400
@@ -37,9 +892,171 @@
     "match": true,
     "massError": 0
   },
+  "framePacing": {
+    "frameSamples": 3753,
+    "medianFrameMs": 16.69999999999709,
+    "p95FrameMs": 16.799999999999272
+  },
+  "errors": [],
+  "offlineNetworkRequests": [],
+  "pageRequests": [
+    "index.html"
+  ],
   "bothJobsComplete": true,
   "offlineOrderComplete": true,
-  "offlineDownloadBytes": 836758,
-  "offlineNetworkRequests": [],
-  "browserErrors": []
+  "offlineDownloadBytes": 863954,
+  "orderCycles": {
+    "bay": [
+      {
+        "cycle": 1,
+        "bay": 34600,
+        "markMass": 34600,
+        "loads": {
+          "dig": 34600,
+          "lift": 34600,
+          "swing": 34338,
+          "dump": 0
+        }
+      },
+      {
+        "cycle": 2,
+        "bay": 69800,
+        "markMass": 69800,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 34338,
+          "dump": 0
+        }
+      }
+    ],
+    "stockpile": [
+      {
+        "cycle": 1,
+        "bay": 69800,
+        "markMass": 35200,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 35200,
+          "dump": 0
+        }
+      },
+      {
+        "cycle": 2,
+        "bay": 69800,
+        "markMass": 70400,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 35200,
+          "dump": 0
+        }
+      },
+      {
+        "cycle": 3,
+        "bay": 69800,
+        "markMass": 105600,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 35200,
+          "dump": 0
+        }
+      }
+    ],
+    "offlineBay": [
+      {
+        "cycle": 1,
+        "bay": 34607,
+        "markMass": 34607,
+        "loads": {
+          "dig": 34607,
+          "lift": 34607,
+          "swing": 34338,
+          "dump": 0
+        }
+      },
+      {
+        "cycle": 2,
+        "bay": 69807,
+        "markMass": 69807,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 34338,
+          "dump": 0
+        }
+      }
+    ],
+    "offlineStockpile": [
+      {
+        "cycle": 1,
+        "bay": 69807,
+        "markMass": 35200,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 35200,
+          "dump": 0
+        }
+      },
+      {
+        "cycle": 2,
+        "bay": 69807,
+        "markMass": 70400,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 35200,
+          "dump": 0
+        }
+      },
+      {
+        "cycle": 3,
+        "bay": 69807,
+        "markMass": 105600,
+        "loads": {
+          "dig": 35200,
+          "lift": 35200,
+          "swing": 35200,
+          "dump": 0
+        }
+      }
+    ]
+  },
+  "cutView": {
+    "desktop": {
+      "dragStartTip": [
+        6.3661652915639735,
+        2.795423391558078,
+        0
+      ],
+      "dragEndTip": [
+        5.753451813288037,
+        2.2410116142916676,
+        0
+      ],
+      "openedCurl": -1.1703884363721782,
+      "closedCurl": -0.7024004853312967,
+      "pausedOrbitPixelChange": 27.223,
+      "resetFromPausedCutView": true
+    },
+    "touch": {
+      "dragStartTip": [
+        4.8740550112279415,
+        3.6377885291582475,
+        0
+      ],
+      "dragEndTip": [
+        4.569941115557214,
+        1.4219658539007938,
+        0
+      ],
+      "openedCurl": -1.0105284284255118,
+      "closedCurl": -0.5943183033512508,
+      "pausedOrbitPixelChange": 13.209,
+      "resetFromPausedCutView": true
+    }
+  }
 }

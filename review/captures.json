@@ -1,0 +1,448 @@
+{
+  "shots": [
+    {
+      "id": "T01",
+      "label": "At the bank",
+      "section": "dig to dump",
+      "frames": [
+        0,
+        0
+      ],
+      "bucket": [
+        0,
+        0
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "T02",
+      "label": "Teeth entering the bank",
+      "section": "dig to dump",
+      "frames": [
+        141,
+        141
+      ],
+      "bucket": [
+        13875,
+        500
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "01",
+      "label": "Mid-cut \u00b7 cab side",
+      "section": "working views",
+      "frames": [
+        191,
+        191
+      ],
+      "bucket": [
+        16630,
+        23820
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "T03",
+      "label": "Drawing the stick in",
+      "section": "dig to dump",
+      "frames": [
+        191,
+        191
+      ],
+      "bucket": [
+        16630,
+        23820
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "02",
+      "label": "Full cut \u00b7 elevated",
+      "section": "working views",
+      "frames": [
+        294,
+        279
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "T04",
+      "label": "Bucket curled",
+      "section": "dig to dump",
+      "frames": [
+        294,
+        279
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "03",
+      "label": "Lifting \u00b7 service side",
+      "section": "working views",
+      "frames": [
+        321,
+        306
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "T05",
+      "label": "Lifting clear",
+      "section": "dig to dump",
+      "frames": [
+        321,
+        306
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "04",
+      "label": "Carry \u00b7 cab side",
+      "section": "working views",
+      "frames": [
+        352,
+        337
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "05",
+      "label": "Carry \u00b7 front isolated",
+      "section": "working views",
+      "frames": [
+        352,
+        337
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "06",
+      "label": "Carry \u00b7 teeth and load",
+      "section": "working views",
+      "frames": [
+        352,
+        337
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "07",
+      "label": "Carry \u00b7 rear quarter",
+      "section": "working views",
+      "frames": [
+        352,
+        337
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "08",
+      "label": "Carry \u00b7 cylinders",
+      "section": "working views",
+      "frames": [
+        352,
+        337
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "09",
+      "label": "Carry \u00b7 undercarriage isolated",
+      "section": "working views",
+      "frames": [
+        352,
+        337
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "10",
+      "label": "Swing \u00b7 elevated",
+      "section": "working views",
+      "frames": [
+        465,
+        450
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "T06",
+      "label": "Swinging the load",
+      "section": "dig to dump",
+      "frames": [
+        465,
+        450
+      ],
+      "bucket": [
+        67200,
+        34664
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "T07",
+      "label": "Over the bay",
+      "section": "dig to dump",
+      "frames": [
+        580,
+        565
+      ],
+      "bucket": [
+        67200,
+        34338
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "11",
+      "label": "Dump \u00b7 bucket mouth and stream",
+      "section": "working views",
+      "frames": [
+        613,
+        616
+      ],
+      "bucket": [
+        60240,
+        26562
+      ],
+      "bay": [
+        0,
+        326
+      ]
+    },
+    {
+      "id": "T08",
+      "label": "Load leaving the lip",
+      "section": "dig to dump",
+      "frames": [
+        613,
+        616
+      ],
+      "bucket": [
+        60240,
+        26562
+      ],
+      "bay": [
+        0,
+        326
+      ]
+    },
+    {
+      "id": "12",
+      "label": "Dump \u00b7 service side",
+      "section": "working views",
+      "frames": [
+        650,
+        646
+      ],
+      "bucket": [
+        2760,
+        0
+      ],
+      "bay": [
+        1831,
+        2464
+      ]
+    },
+    {
+      "id": "T09",
+      "label": "Stream landing in bay",
+      "section": "dig to dump",
+      "frames": [
+        650,
+        646
+      ],
+      "bucket": [
+        2760,
+        0
+      ],
+      "bay": [
+        1831,
+        2464
+      ]
+    },
+    {
+      "id": "14",
+      "label": "Dump \u00b7 lip to deposit",
+      "section": "working views",
+      "frames": [
+        650,
+        646
+      ],
+      "bucket": [
+        2760,
+        0
+      ],
+      "bay": [
+        1831,
+        2464
+      ]
+    },
+    {
+      "id": "T10",
+      "label": "Sand settled",
+      "section": "dig to dump",
+      "frames": [
+        763,
+        764
+      ],
+      "bucket": [
+        0,
+        0
+      ],
+      "bay": [
+        67200,
+        34664
+      ]
+    },
+    {
+      "id": "13",
+      "label": "Manual travel \u00b7 bank slope",
+      "section": "working views",
+      "frames": [
+        115,
+        115
+      ],
+      "bucket": [
+        0,
+        0
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "15",
+      "label": "Manual travel \u00b7 opposite crawler",
+      "section": "working views",
+      "frames": [
+        115,
+        115
+      ],
+      "bucket": [
+        0,
+        0
+      ],
+      "bay": [
+        0,
+        0
+      ]
+    }
+  ],
+  "viewport": [
+    1600,
+    960
+  ],
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "browser": "157.0.8103.80",
+  "baseline": "677fca83340a42893c026efd9c84c05d07fd50f9",
+  "htmlSha256": {
+    "baseline": "8e5dfca59de83dd9e75e43c15e19e15ee18182dfd9fac7cdad7703aff74dd55a",
+    "candidate": "234f9da1edbcad23ca2af444ad61ff029e18512cbcc8f40380562a073ed7f255"
+  },
+  "seconds": 14.4,
+  "framesPerSecond": 20,
+  "ticks": {
+    "0": "dig",
+    "360": "lift",
+    "435": "swing",
+    "708": "dump"
+  }
+}

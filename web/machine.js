@@ -4,9 +4,184 @@ export const machineDimensions = Object.freeze({
   shoulder: [0.55, 1.55],
   boom: 4.45,
   stick: 2.65,
-  tooth: [0.86, -0.52],
-  limits: { boom: [-0.18, 1.19], stick: [-2.55, -0.35], curl: [-1.15, 2.35] },
+  tooth: [-0.86, -0.52],
+  mountAngle: 1.2,
+  limits: { boom: [-0.18, 1.19], stick: [-2.55, -0.35], curl: [-1.4, 1.35] },
 });
+
+const bowlSection = [
+  [0.48, -0.055],
+  [0.55, -0.1],
+  [0.64, -0.25],
+  [0.63, -0.46],
+  [0.51, -0.68],
+  [0.28, -0.82],
+  [0.0, -0.86],
+  [-0.24, -0.82],
+  [-0.66, -0.62],
+  [-0.72, -0.55],
+  [-0.64, -0.55],
+  [-0.2, -0.74],
+  [0.02, -0.77],
+  [0.24, -0.73],
+  [0.44, -0.61],
+  [0.52, -0.45],
+  [0.54, -0.27],
+  [0.48, -0.18],
+  [0.445, -0.12],
+];
+
+const cheekSection = [
+  [0.34, 0.08],
+  [0.54, -0.055],
+  [0.63, -0.28],
+  [0.6, -0.5],
+  [0.43, -0.71],
+  [0.18, -0.81],
+  [-0.12, -0.81],
+  [-0.68, -0.6],
+  [-0.6, -0.49],
+  [-0.16, -0.33],
+  [0.04, -0.084],
+  [0.14, 0.038],
+];
+
+const toothSection = [
+  [-0.55, -0.61],
+  [-0.68, -0.65],
+  [-0.86, -0.528],
+  [-0.86, -0.512],
+  [-0.68, -0.52],
+  [-0.54, -0.54],
+];
+
+const hangerSection = [
+  [-0.1, 0.07],
+  [-0.05, 0.15],
+  [0.1, 0.13],
+  [0.42, 0.02],
+  [0.51, -0.13],
+  [0.52, -0.33],
+  [0.2, -0.34],
+  [-0.1, -0.1],
+];
+
+function convexProfile(points) {
+  const sorted = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const half = (values) => {
+    const hull = [];
+    for (const p of values) {
+      while (hull.length >= 2) {
+        const a = hull[hull.length - 2],
+          b = hull[hull.length - 1];
+        if ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) > 0) break;
+        hull.pop();
+      }
+      hull.push(p);
+    }
+    hull.pop();
+    return hull;
+  };
+  return [...half(sorted), ...half(sorted.reverse())];
+}
+const sweptProfile = convexProfile([
+  ...bowlSection,
+  ...cheekSection,
+  ...toothSection,
+  ...hangerSection,
+]);
+const projectedRadius = new Float64Array(sweptProfile.length);
+const projectedHeight = new Float64Array(sweptProfile.length);
+
+// Axis-aligned boxes in the track frame, using the rendered track path,
+// grousers and crossmember dimensions. The three stepped boxes around each
+// track bound its rounded idler and drive ends. Format: centre, half extents.
+const carrierBoxes = [];
+for (const z of [-1.09, 1.09]) {
+  for (const [length, height] of [
+    [1.88, 0.518],
+    [2.07, 0.454],
+    [2.14, 0.265],
+  ]) {
+    carrierBoxes.push([0, 0.51, z, length, height, 0.34]);
+  }
+}
+carrierBoxes.push(
+  [0, 0.65, 0, 1.225, 0.205, 0.99],
+  [-0.91, 0.54, 0, 0.195, 0.13, 1.2],
+  [0.91, 0.54, 0, 0.195, 0.13, 1.2],
+  [0, 0.98, 0, 0.96, 0.15, 0.96],
+);
+const carrierGaps = new Float64Array(carrierBoxes.length);
+
+// Signed separating-axis clearance (metres). Above zero the convex bucket
+// envelope is clear; below zero is penetration into a carrier bound. Filling
+// the empty mouth here keeps the controller from enclosing a track in it.
+// yaw is the upper carriage angle relative to the tracks. Purely geometric:
+// the controller decides how to limit commands and how to escape penetration.
+export function carrierClearance({ boom, stick, curl, yaw = 0 }) {
+  const middle = boom + stick,
+    theta = middle + machineDimensions.mountAngle - curl;
+  const wristR =
+    machineDimensions.shoulder[0] +
+    machineDimensions.boom * Math.cos(boom) +
+    machineDimensions.stick * Math.cos(middle);
+  const wristH =
+    machineDimensions.shoulder[1] +
+    machineDimensions.boom * Math.sin(boom) +
+    machineDimensions.stick * Math.sin(middle);
+  const ct = Math.cos(theta),
+    st = Math.sin(theta),
+    cs = Math.cos(yaw),
+    sn = Math.sin(yaw);
+  for (let i = 0; i < sweptProfile.length; i++) {
+    const [x, y] = sweptProfile[i];
+    projectedRadius[i] = wristR + ct * x - st * y;
+    projectedHeight[i] = wristH + st * x + ct * y;
+  }
+  carrierGaps.fill(-Infinity);
+  function axis(nx, ny, nz) {
+    const magnitude = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (magnitude < 1e-9) return;
+    nx /= magnitude;
+    ny /= magnitude;
+    nz /= magnitude;
+    const radial = nx * cs - nz * sn,
+      transverse = nx * sn + nz * cs;
+    let low = Infinity,
+      high = -Infinity;
+    for (let i = 0; i < projectedRadius.length; i++) {
+      const p = radial * projectedRadius[i] + ny * projectedHeight[i];
+      low = Math.min(low, p);
+      high = Math.max(high, p);
+    }
+    const rim = 0.605 * Math.abs(transverse) + 0.015;
+    low -= rim;
+    high += rim;
+    for (let i = 0; i < carrierBoxes.length; i++) {
+      const box = carrierBoxes[i],
+        centre = nx * box[0] + ny * box[1] + nz * box[2];
+      const radius = Math.abs(nx) * box[3] + Math.abs(ny) * box[4] + Math.abs(nz) * box[5];
+      carrierGaps[i] = Math.max(carrierGaps[i], low - centre - radius, centre - high - radius);
+    }
+  }
+  axis(1, 0, 0);
+  axis(0, 1, 0);
+  axis(0, 0, 1);
+  axis(sn, 0, cs);
+  axis(cs, 0, -sn);
+  for (let i = 0; i < projectedRadius.length; i++) {
+    const j = (i + 1) % projectedRadius.length;
+    const dx = projectedRadius[j] - projectedRadius[i],
+      dy = projectedHeight[j] - projectedHeight[i];
+    axis(-dy * cs, dx, dy * sn); // bucket face
+    axis(0, -dx * sn, -dy); // profile edge x chassis X
+    axis(dy, -dx * cs, 0); // profile edge x chassis Z
+  }
+  let result = Infinity;
+  for (const gap of carrierGaps) result = Math.min(result, gap);
+  return result;
+}
 
 const colors = {
   sun: '#f5b324',
@@ -130,7 +305,9 @@ export function createMachine(THREE) {
     geom.rotateZ(angle).translate(x, y, z);
     emit(part, geom, color, finish);
   }
-  function plate(part, outline, z, width, color, bevel = 0.025, finish = 'enamel') {
+  const steelSections = [];
+  function plate(part, outline, z, width, color, bevel = 0.025, finish = 'enamel', sectionName) {
+    if (sectionName) steelSections.push({ name: sectionName, part, outline, z, width, bevel });
     const path = new T.Shape(outline.map((p) => new T.Vector2(...p)));
     const geom = new T.ExtrudeGeometry(path, {
       depth: width,
@@ -404,9 +581,10 @@ export function createMachine(THREE) {
 
   // The cab has an open interior with independent, inset panes and the
   // characteristic raked windshield. Window seals and steel posts are solid.
-  const cab = group('Operator cab', house);
+  const cab = group('Operator cab', house, 0, 0, 0.16);
   const cabCenter = 0.82,
     halfCab = 0.44;
+  box(house, 0.17, 1.4, 0.99, 1.95, 0.17, 0.93, colors.dark, 'alloy');
   plate(
     cab,
     [
@@ -540,9 +718,9 @@ export function createMachine(THREE) {
     0.026,
     colors.graphite,
   );
-  box(house, 0.04, 1.28, 1.4, 1.02, 0.09, 0.18, colors.steel, 'alloy');
+  box(house, 0.04, 1.28, 1.49, 1.02, 0.09, 0.18, colors.steel, 'alloy');
   for (let i = 0; i < 12; i++)
-    box(house, -0.43 + i * 0.085, 1.333, 1.4, 0.025, 0.022, 0.15, colors.graphite);
+    box(house, -0.43 + i * 0.085, 1.333, 1.49, 0.025, 0.022, 0.15, colors.graphite);
   for (const z of [0.49, 1.15]) {
     box(cab, 0.81, 3.2, z, 0.13, 0.12, 0.17, colors.graphite);
     box(cab, 0.883, 3.2, z, 0.018, 0.083, 0.125, '#ffead0', 'bright');
@@ -574,7 +752,7 @@ export function createMachine(THREE) {
         [0.5, 1.77],
         [0.25, 1.6],
       ],
-      side * 0.302,
+      side * 0.316,
       0.092,
       colors.gold,
       0.024,
@@ -586,12 +764,8 @@ export function createMachine(THREE) {
     [0.21, -0.25],
     [1.3, 0.13],
     [2.06, 0.29],
-    [3.76, -0.16],
-    [4.4, -0.17],
-    [4.59, -0.09],
-    [4.62, 0.05],
-    [4.47, 0.18],
-    [3.97, 0.22],
+    [3.6, -0.11],
+    [3.64, 0.29],
     [2.23, 0.81],
     [1.75, 0.85],
     [1.31, 0.72],
@@ -599,7 +773,7 @@ export function createMachine(THREE) {
     [0.02, 0.19],
     [-0.15, 0.12],
   ];
-  plate(boom, boomPlate, 0, 0.4, colors.sun, 0.037);
+  plate(boom, boomPlate, 0, 0.4, colors.sun, 0.037, 'enamel', 'boom web');
   for (const side of [-1, 1]) {
     plate(
       boom,
@@ -655,22 +829,26 @@ export function createMachine(THREE) {
     [0.1, -0.24],
     [-0.15, -0.17],
   ];
-  plate(stick, stickPlate, 0, 0.29, colors.sun, 0.024);
+  plate(stick, stickPlate, 0, 0.29, colors.sun, 0.024, 'enamel', 'stick web');
   for (const side of [-1, 1]) {
     plate(
       boom,
       [
-        [3.95, -0.145],
+        [3.38, -0.04],
+        [3.77, -0.15],
         [4.45, -0.15],
         [4.57, -0.08],
         [4.57, 0.08],
         [4.45, 0.151],
-        [3.96, 0.17],
+        [3.96, 0.24],
+        [3.39, 0.39],
       ],
-      side * 0.237,
-      0.049,
-      colors.gold,
-      0.014,
+      side * 0.242,
+      0.085,
+      colors.sun,
+      0.012,
+      'enamel',
+      'boom clevis',
     );
     pipe(
       stick,
@@ -685,75 +863,23 @@ export function createMachine(THREE) {
       colors.graphite,
     );
   }
-  pin(stick, 0, 0, 0.292, 0.112);
+  pin(stick, 0, 0, 0.307, 0.112);
   // Rolled bucket back is a thick open extrusion. Only the cheeks close the
   // sides. The open top remains visible from behind the cutting edge.
-  const shell = [
-    [-0.33, 0.09],
-    [-0.53, -0.04],
-    [-0.64, -0.25],
-    [-0.63, -0.46],
-    [-0.51, -0.68],
-    [-0.28, -0.82],
-    [0.0, -0.86],
-    [0.24, -0.82],
-    [0.66, -0.62],
-    [0.72, -0.55],
-    [0.64, -0.55],
-    [0.2, -0.74],
-    [-0.02, -0.77],
-    [-0.24, -0.73],
-    [-0.44, -0.61],
-    [-0.52, -0.45],
-    [-0.54, -0.27],
-    [-0.46, -0.1],
-    [-0.29, 0.0],
-  ];
-  plate(bucket, shell, 0, 1.07, colors.steel, 0.012, 'alloy');
-  const cheek = [
-    [-0.34, 0.08],
-    [-0.54, -0.055],
-    [-0.63, -0.28],
-    [-0.6, -0.5],
-    [-0.43, -0.71],
-    [-0.18, -0.81],
-    [0.12, -0.81],
-    [0.68, -0.6],
-    [0.6, -0.49],
-    [0.16, -0.33],
-    [-0.04, -0.084],
-    [-0.14, 0.038],
-  ];
+  plate(bucket, bowlSection, 0, 1.07, colors.steel, 0.012, 'alloy', 'rolled bowl');
   for (const side of [-1, 1]) {
-    plate(bucket, cheek, side * 0.555, 0.045, colors.graphite, 0.012, 'alloy');
+    plate(bucket, cheekSection, side * 0.555, 0.045, colors.graphite, 0.012, 'alloy');
+    plate(bucket, hangerSection, side * 0.288, 0.058, colors.frame, 0.01, 'alloy', 'bucket hanger');
     plate(
       bucket,
       [
-        [-0.34, 0.17],
-        [-0.23, 0.29],
-        [-0.09, 0.23],
-        [0.1, 0.09],
-        [0.1, -0.1],
-        [-0.19, -0.29],
-        [-0.52, -0.33],
-        [-0.49, -0.12],
-      ],
-      side * 0.203,
-      0.085,
-      colors.frame,
-      0.014,
-      'alloy',
-    );
-    plate(
-      bucket,
-      [
-        [-0.5, -0.59],
-        [-0.37, -0.72],
-        [-0.08, -0.81],
-        [0.14, -0.79],
-        [0.55, -0.62],
-        [0.41, -0.63],
-        [-0.08, -0.72],
+        [0.5, -0.59],
+        [0.37, -0.72],
+        [0.08, -0.81],
+        [-0.14, -0.79],
+        [-0.55, -0.62],
+        [-0.41, -0.63],
+        [0.08, -0.72],
       ],
       side * 0.588,
       0.013,
@@ -762,48 +888,131 @@ export function createMachine(THREE) {
       'alloy',
     );
   }
-  box(bucket, 0.63, -0.597, 0, 0.13, 0.12, 1.18, colors.wear, 'alloy', 0.25);
+  box(bucket, -0.63, -0.597, 0, 0.13, 0.12, 1.18, colors.wear, 'alloy', -0.25);
+  const teeth = group('Five inward cutting teeth', bucket);
   for (const z of [-0.48, -0.24, 0, 0.24, 0.48]) {
-    plate(
-      bucket,
-      [
-        [0.55, -0.61],
-        [0.68, -0.65],
-        [0.86, -0.528],
-        [0.86, -0.512],
-        [0.68, -0.52],
-        [0.54, -0.54],
-      ],
-      z,
-      0.112,
-      colors.wear,
-      0.006,
-      'alloy',
-    );
+    plate(teeth, toothSection, z, 0.112, colors.wear, 0, 'alloy');
   }
-  pin(bucket, 0, 0, 0.267, 0.095);
-  const sand = group('Retained bucket load', bucket, 0, -0.745, 0);
-  // Crown is biased toward the heel, below the opening of the open scoop.
-  const mound = [
-    [-0.39, -0.26],
-    [-0.25, -0.49],
-    [0.24, -0.49],
-    [0.49, -0.36],
-    [0.55, 0.22],
-    [0.34, 0.49],
-    [-0.25, 0.49],
-    [-0.43, 0.26],
+  pin(bucket, 0, 0, 0.333, 0.095);
+  // Slice the real inner shell. The lower mesh follows the bottom and the full
+  // mesh reaches the struck chord plus a shallow heap. Interpolating between
+  // them makes volume proportional to the CPU's retained load fraction.
+  const cavity = bowlSection.slice(10);
+  const halfMouthWidth = 0.528;
+  const left = cavity[0][0],
+    back = cavity[cavity.length - 1][0];
+  const columns = [
+    ...new Set([
+      ...cavity.map((p) => p[0]),
+      ...Array.from({ length: 17 }, (_, i) => left + ((back - left) * i) / 16),
+    ]),
+  ].sort((a, b) => a - b);
+  const rows = 11,
+    bottom = [],
+    filled = [],
+    uv = [],
+    fillColors = [],
+    indices = [];
+  const field = [],
+    color = new T.Color();
+  for (const x of columns) {
+    const ys = [];
+    for (let i = 0; i < cavity.length; i++) {
+      const a = cavity[i],
+        b = cavity[(i + 1) % cavity.length];
+      if (x < Math.min(a[0], b[0]) - 1e-9 || x > Math.max(a[0], b[0]) + 1e-9) continue;
+      if (a[0] === b[0]) ys.push(a[1], b[1]);
+      else ys.push(a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0]));
+    }
+    const floor = Math.min(...ys),
+      lid = Math.max(...ys);
+    for (let j = 0; j < rows; j++) {
+      const z = halfMouthWidth * ((2 * j) / (rows - 1) - 1);
+      const heap = Math.max(0, Math.min(x - left, back - x, halfMouthWidth - Math.abs(z))) * 0.625;
+      bottom.push(x, floor, z);
+      filled.push(x, lid + heap, z);
+      field.push([lid - floor, heap]);
+      uv.push(x * 2, z * 2);
+      color.set('#d6ac75').multiplyScalar(0.96 + 0.08 * random());
+      fillColors.push(color.r, color.g, color.b);
+    }
+  }
+  const areas = new Float64Array(field.length);
+  let struck = 0,
+    heaped = 0;
+  function triangle(a, b, c) {
+    indices.push(a, b, c);
+    const area =
+      Math.abs(
+        (bottom[3 * b] - bottom[3 * a]) * (bottom[3 * c + 2] - bottom[3 * a + 2]) -
+          (bottom[3 * c] - bottom[3 * a]) * (bottom[3 * b + 2] - bottom[3 * a + 2]),
+      ) * 0.5;
+    struck += (area * (field[a][0] + field[b][0] + field[c][0])) / 3;
+    heaped += (area * (field[a][1] + field[b][1] + field[c][1])) / 3;
+    for (const i of [a, b, c]) areas[i] += area / 3;
+  }
+  for (let i = 0; i < columns.length - 1; i++)
+    for (let j = 0; j < rows - 1; j++) {
+      const a = i * rows + j,
+        b = a + rows;
+      triangle(a, a + 1, b);
+      triangle(a + 1, b + 1, b);
+    }
+  const nominalCapacity = 0.55;
+  const heapScale = (nominalCapacity - struck) / heaped;
+  let moment = 0;
+  for (let i = 0; i < field.length; i++) {
+    const depth = field[i][0] + field[i][1] * heapScale;
+    filled[i * 3 + 1] = bottom[i * 3 + 1] + depth;
+    moment += areas[i] * bottom[i * 3] * depth;
+  }
+  // Balanced transfer towards the heel when the bucket curls, towards the
+  // lip when it tips. Integrating this shape on the same triangles gives
+  // zero volume, so the second morph can redistribute a half-filled scoop.
+  const centroid = moment / nominalCapacity;
+  const width = Math.max(centroid - columns[0], columns[columns.length - 1] - centroid);
+  const redistributed = bottom.slice();
+  for (let i = 0; i < field.length; i++) {
+    const k = i * 3;
+    const depth = filled[k + 1] - bottom[k + 1];
+    redistributed[k + 1] += (depth * (bottom[k] - centroid)) / width;
+  }
+  const loadGeometry = new T.BufferGeometry();
+  loadGeometry.setAttribute('position', new T.Float32BufferAttribute(bottom, 3));
+  loadGeometry.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+  loadGeometry.setAttribute('color', new T.Float32BufferAttribute(fillColors, 3));
+  loadGeometry.setIndex(indices);
+  loadGeometry.computeVertexNormals();
+  const fullSurface = new T.BufferGeometry();
+  fullSurface.setAttribute('position', new T.Float32BufferAttribute(filled, 3));
+  fullSurface.setIndex(indices);
+  fullSurface.computeVertexNormals();
+  const tiltedSurface = new T.BufferGeometry();
+  tiltedSurface.setAttribute('position', new T.Float32BufferAttribute(redistributed, 3));
+  tiltedSurface.setIndex(indices);
+  tiltedSurface.computeVertexNormals();
+  loadGeometry.morphAttributes.position = [
+    fullSurface.attributes.position,
+    tiltedSurface.attributes.position,
   ];
-  loft(
-    sand,
-    [
-      ring(mound, 0.01, 0.72, 0.83),
-      ring(mound, 0.2, 1, 1),
-      ring(mound, 0.36, 0.79, 0.82),
-      ring(mound, 0.46, 0.33, 0.41),
-    ],
-    '#c29b63',
+  loadGeometry.morphAttributes.normal = [
+    fullSurface.attributes.normal,
+    tiltedSurface.attributes.normal,
+  ];
+  loadGeometry.computeBoundingSphere();
+  const sand = new T.Mesh(
+    loadGeometry,
+    new T.MeshStandardMaterial({
+      map: patina,
+      vertexColors: true,
+      roughness: 0.98,
+      side: T.DoubleSide,
+    }),
   );
+  sand.name = 'Retained bucket load';
+  sand.userData.capacity = { struckM3: struck, heapedM3: struck + heaped * heapScale };
+  sand.castShadow = sand.receiveShadow = true;
+  bucket.add(sand);
 
   // Lettering is vector-rasterized locally into a tiny alpha-tested atlas.
   // Each panel is offset from its own mounting face along the surface normal.
@@ -844,6 +1053,13 @@ export function createMachine(THREE) {
   // Fixed-length barrel with a gland and a piston that emerges to its far
   // mount. Only four 2D pin calculations are needed for the actuators.
   const actuators = [];
+  // Fork cheeks support the fixed barrel eyes on either side of the moving
+  // cylinder. The ear width leaves clearance to the gland at every angle.
+  function fork(part, profile, z, spacing, width) {
+    for (const sign of [-1, 1]) {
+      plate(part, profile, z + sign * spacing, width, colors.gold, 0.008);
+    }
+  }
   function hydraulic(parent, name, a, length, radius) {
     const barrel = group(name + ' / barrel', parent, ...a);
     const rod = group(name + ' / exposed rod', barrel, length, 0, 0);
@@ -859,6 +1075,19 @@ export function createMachine(THREE) {
       14,
     );
     axle(barrel, 0, 0, 0, radius * 1.08, radius * 1.88, colors.steel, 14);
+    // Hard line fixed to the barrel. Both ports rotate with the barrel eye.
+    const skin = radius * 1.13;
+    pipe(
+      barrel,
+      [
+        [0.2, radius * 0.86, 0],
+        [0.23, skin + 0.014, 0],
+        [length - 0.17, skin + 0.014, 0],
+        [length - 0.14, radius * 0.86, 0],
+      ],
+      0.013,
+      colors.steel,
+    );
     bar(rod, [0, 0, 0], [1, 0, 0], radius * 0.53, colors.chrome, 'bright', 12);
     const record = { name, barrel, rod, barrelLength: length, distance: 0, extension: 0 };
     actuators.push(record);
@@ -872,27 +1101,56 @@ export function createMachine(THREE) {
       rod.scale.x = Math.max(0.001, record.extension);
     };
   }
+  pin(boom, 1.7, 0.34, 0.455, 0.068);
   const boomDrivers = [-1, 1].map((side) => {
-    const z = 0.4 * side;
+    const z = 0.36 * side;
+    fork(
+      house,
+      [
+        [0.72, 1.35],
+        [1.09, 1.35],
+        [1.04, 1.46],
+        [0.98, 1.52],
+        [0.86, 1.53],
+        [0.76, 1.43],
+      ],
+      z,
+      0.113,
+      0.029,
+    );
     axle(boom, 1.7, 0.34, z, 0.112, 0.15, colors.gold, 16, 'enamel');
-    return hydraulic(house, 'Boom lift ' + side, [0.92, 1.42, z], 1.09, 0.101);
+    return hydraulic(house, 'Boom lift ' + side, [0.92, 1.42, z], 1.09, 0.091);
   });
-  const stickDriver = hydraulic(boom, 'Stick cylinder', [1.5, 0.77, 0], 2.33, 0.106);
-  pin(stick, -0.37, 0.39, 0.181, 0.074);
+  fork(
+    boom,
+    [
+      [1.13, 0.62],
+      [1.87, 0.8],
+      [1.67, 1.16],
+      [1.6, 1.28],
+      [1.47, 1.34],
+      [1.37, 1.25],
+    ],
+    0,
+    0.136,
+    0.047,
+  );
+  const stickDriver = hydraulic(boom, 'Stick cylinder', [1.5, 1.22, 0], 2.33, 0.106);
+  pin(stick, -0.48, 0.25, 0.181, 0.074);
   // A four-bar linkage drives the bucket. Solve both link lengths with a
   // circle intersection. The selected branch puts the knuckle above the arm.
-  const dogAnchor = [2.15, 0.14],
-    dogLength = 0.54,
+  const dogAnchor = [2.35, -0.01],
+    dogLength = 0.7,
     linkLength = 0.59;
-  const lug = [-0.29, 0.22];
-  pin(stick, ...dogAnchor, 0.227, 0.079);
-  pin(bucket, ...lug, 0.286, 0.073);
+  const lug = [0.375, -0.126];
+  pin(stick, ...dogAnchor, 0.265, 0.079);
+  pin(bucket, ...lug, 0.406, 0.073);
   const rocker = group('Bucket bellcrank', stick, ...dogAnchor);
   const link = group('Bucket dogbone', stick);
   for (const side of [-1, 1]) {
-    const z = side * 0.235;
+    const z = side * 0.213;
     for (const [part, len, width] of [
-      [rocker, dogLength, 0.058],
+      [rocker, dogLength, 0.04],
       [link, linkLength, 0.048],
     ]) {
       const y = part === rocker ? 0.075 : 0.065;
@@ -906,11 +1164,34 @@ export function createMachine(THREE) {
         [0.035, y],
         [-0.05, y * 0.6],
       ];
-      plate(part, shape, part === rocker ? z : side * 0.298, width, colors.gold, 0.009);
+      plate(
+        part,
+        shape,
+        part === rocker ? z : side * 0.364,
+        width,
+        colors.gold,
+        0.009,
+        'enamel',
+        part === rocker ? 'rocker strap' : 'coupler link',
+      );
     }
   }
-  pin(rocker, dogLength, 0, 0.337, 0.065);
-  const curlDriver = hydraulic(stick, 'Bucket crowd', [0.34, 0.38, 0], 1.36, 0.083);
+  pin(rocker, dogLength, 0, 0.406, 0.065);
+  fork(
+    stick,
+    [
+      [0.09, 0.27],
+      [0.77, 0.24],
+      [0.55, 0.65],
+      [0.46, 0.81],
+      [0.35, 0.84],
+      [0.28, 0.77],
+    ],
+    0,
+    0.115,
+    0.035,
+  );
+  const curlDriver = hydraulic(stick, 'Bucket crowd', [0.38, 0.75, 0], 1.36, 0.083);
   function buildBuffers(attr) {
     const geom = new T.BufferGeometry();
     geom.setAttribute('position', new T.Float32BufferAttribute(attr.p, 3));
@@ -966,7 +1247,7 @@ export function createMachine(THREE) {
   function pose({
     boom: b = 0.67,
     stick: s = -1.73,
-    curl: c = 1.1,
+    curl: c = 0.3,
     yaw = 0,
     load = 0,
     travel = 0,
@@ -978,16 +1259,17 @@ export function createMachine(THREE) {
     house.rotation.y = yaw;
     boom.rotation.z = b;
     stick.rotation.z = s;
-    bucket.rotation.z = c;
+    const bucketAngle = machineDimensions.mountAngle - c;
+    bucket.rotation.z = bucketAngle;
     const bx = 0.55 + 1.7 * Math.cos(b) - 0.34 * Math.sin(b);
     const by = 1.55 + 1.7 * Math.sin(b) + 0.34 * Math.cos(b);
     for (const drive of boomDrivers) drive(bx, by);
     stickDriver(
-      4.45 - 0.37 * Math.cos(s) - 0.39 * Math.sin(s),
-      -0.37 * Math.sin(s) + 0.39 * Math.cos(s),
+      4.45 - 0.48 * Math.cos(s) - 0.25 * Math.sin(s),
+      -0.48 * Math.sin(s) + 0.25 * Math.cos(s),
     );
-    const cx = 2.65 + lug[0] * Math.cos(c) - lug[1] * Math.sin(c);
-    const cy = lug[0] * Math.sin(c) + lug[1] * Math.cos(c);
+    const cx = 2.65 + lug[0] * Math.cos(bucketAngle) - lug[1] * Math.sin(bucketAngle);
+    const cy = lug[0] * Math.sin(bucketAngle) + lug[1] * Math.cos(bucketAngle);
     const dx = cx - dogAnchor[0],
       dy = cy - dogAnchor[1],
       d = Math.hypot(dx, dy);
@@ -1001,9 +1283,11 @@ export function createMachine(THREE) {
     curlDriver(kx, ky);
     sand.visible = load > 0.002;
     const fraction = clamp(load, 0, 1);
-    sand.scale.set(0.48 + 0.52 * fraction, 0.04 + 0.96 * fraction, 0.57 + 0.43 * fraction);
+    const pitch = -(b + s + bucketAngle);
+    sand.morphTargetInfluences[0] = fraction;
+    sand.morphTargetInfluences[1] = fraction * (1 - fraction) * clamp((pitch - 0.38) * 1.5, -1, 1);
     setTracks(travel, turn);
   }
   pose();
-  return { root, pose, tip, bucket, actuators, rocker, link };
+  return { root, pose, tip, teeth, bucket, actuators, rocker, link, steelSections };
 }

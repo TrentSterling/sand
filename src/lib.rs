@@ -4,7 +4,8 @@ pub const N: usize = 256;
 const TILE: usize = 16;
 const T: usize = N / TILE;
 const CELLS: usize = N * N;
-pub const CAPACITY: i32 = 67_200;
+// The modeled bucket holds 0.44 m³ struck and 0.55 m³ with a heaped load.
+pub const CAPACITY: i32 = 35_200;
 const DT: f32 = 1.0 / 60.0;
 const SETTLE: i32 = 80;
 const REST: i32 = 92;
@@ -40,6 +41,8 @@ pub struct World {
     pub dense: bool,
     random: u32,
     last_tool: Option<[f32; 4]>,
+    tip_velocity: Option<[f32; 2]>,
+    tip_accel: [f32; 2],
 }
 
 fn coord(i: usize) -> f32 {
@@ -75,6 +78,8 @@ impl World {
             dense,
             random: 27011997,
             last_tool: None,
+            tip_velocity: None,
+            tip_accel: [0.0; 2],
         };
         for z in 0..N {
             for x in 0..N {
@@ -160,16 +165,22 @@ impl World {
         self.base[i] + self.height[i] - ((self.height[i] * self.compact[i] as i32) >> 11)
     }
     pub fn tracks(&mut self, x: f32, z: f32, yaw: f32) {
+        self.track_contact(x, z, yaw, [f32::NEG_INFINITY, 0., 0.]);
+    }
+    pub fn track_contact(&mut self, x: f32, z: f32, yaw: f32, plane: [f32; 3]) {
         let (s, c) = yaw.sin_cos();
         for iz in cell(z - 2.5).max(0)..=cell(z + 2.5).min(N as i32 - 1) {
             for ix in cell(x - 2.5).max(0)..=cell(x + 2.5).min(N as i32 - 1) {
                 let a = coord(ix as usize) - x;
                 let b = coord(iz as usize) - z;
-                let lateral = (a * s + b * c).abs();
+                let lateral = a * s + b * c;
+                let fore = a * c - b * s;
                 let i = iz as usize * N + ix as usize;
-                if (a * c - b * s).abs() > 1.69
-                    || !(0.79..1.39).contains(&lateral)
+                if fore.abs() > 1.69
+                    || !(0.79..1.39).contains(&lateral.abs())
                     || self.height[i] < 10
+                    || (self.mm(i) as f32) * 0.001 + 0.035
+                        < plane[0] + fore * plane[1] + lateral * plane[2]
                 {
                     continue;
                 }
@@ -180,6 +191,14 @@ impl World {
                 }
             }
         }
+    }
+    fn neighbors(i: usize) -> [usize; 4] {
+        [
+            if i.is_multiple_of(N) { i } else { i - 1 },
+            if (i + 1).is_multiple_of(N) { i } else { i + 1 },
+            if i < N { i } else { i - N },
+            if i + N >= CELLS { i } else { i + N },
+        ]
     }
     fn local_random(&mut self) -> f32 {
         self.random ^= self.random << 13;
@@ -204,86 +223,284 @@ impl World {
         let length = dx.hypot(dz);
         let (s, c) = yaw.sin_cos();
         let inward = -(dx * c - dz * s);
-        let curl = pitch - pp;
-        let speed = length / DT;
-        if (pitch < -0.50 || speed > 4.8) && self.load > 0 {
-            let fraction = ((-pitch - 0.48) * 0.12)
-                .max((speed - 4.8) * 0.008)
-                .clamp(0.0, 0.22);
-            let amount = ((self.load as f32 * fraction).ceil() as i32)
-                .max(100)
-                .min(self.load);
-            for _ in 0..4 {
-                if self.air.len() >= MAX_AIR || self.load <= 0 {
-                    break;
-                }
-                let m = ((amount + 3) / 4).min(self.load);
-                let side = self.local_random() * 0.83;
-                let spread = self.local_random() * 0.16;
-                let vx = (dx / DT).clamp(-3.0, 3.0) + s * side + c * spread;
-                let vz = (dz / DT).clamp(-3.0, 3.0) + c * side - s * spread;
-                self.air.push(Grain {
-                    x: x + s * side,
-                    y: y.max(0.03),
-                    z: z + c * side,
-                    mass: m,
-                    vx,
-                    vy: -0.30,
-                    vz,
-                });
-                self.load -= m;
-            }
+        let mut curl = (pitch - pp) % std::f32::consts::TAU;
+        if curl > std::f32::consts::PI {
+            curl -= std::f32::consts::TAU;
         }
-        if length + (y - py).abs() + curl.abs() < 0.0002 || y > 3.4 || length > 0.9 {
+        if curl < -std::f32::consts::PI {
+            curl += std::f32::consts::TAU;
+        }
+        // A discontinuous control pose seeds the new contact; it has no physical velocity.
+        if length > 0.9 || (y - py).abs() > 0.9 {
+            self.tip_velocity = None;
+            self.tip_accel = [0.0; 2];
             return;
         }
-        let capture = (inward > 0.001 || curl > 0.002) && pitch > -1.35;
+        let velocity = [dx / DT, dz / DT];
+        if let Some(prior) = self.tip_velocity.replace(velocity) {
+            for k in 0..2 {
+                let instant = ((velocity[k] - prior[k]) / DT).clamp(-55.0, 55.0);
+                self.tip_accel[k] += 0.18 * (instant - self.tip_accel[k]);
+            }
+        }
+        if self.load > 0 {
+            self.spill(
+                [x, y, z],
+                [velocity[0], (y - py) / DT, velocity[1]],
+                (s, c),
+                pitch,
+            );
+        }
+        if length + (y - py).abs() + curl.abs() < 0.0002 || y > 3.4 {
+            return;
+        }
+        let capture = (inward > 0.001 || curl > 0.002) && (pitch - 0.32).cos() > -0.10;
         let budget = ((length + (py - y).max(0.0) * 0.45 + curl.max(0.0) * 0.40) * 72_000.0) as i32;
         if budget < 1 {
             return;
         }
-        let mut remaining = budget;
-        let ax = cell(x - 0.9).max(0);
-        let bx = cell(x + 0.9).min(N as i32 - 1);
-        let az = cell(z - 0.9).max(0);
-        let bz = cell(z + 0.9).min(N as i32 - 1);
-        for gz in az..=bz {
-            for gx in ax..=bx {
-                if remaining <= 0 {
-                    return;
-                }
-                let i = gz as usize * N + gx as usize;
+        let tooth_mm = (y.max(0.0) * 1000.0) as i32;
+        let mut sources = [(0usize, 0i32); 64];
+        let (mut count, mut demand, mut source_high) = (0, 0, 0);
+        for gz in cell(z - 0.65).max(0)..=cell(z + 0.65).min(N as i32 - 1) {
+            for gx in cell(x - 0.65).max(0)..=cell(x + 0.65).min(N as i32 - 1) {
                 let rx = coord(gx as usize) - x;
                 let rz = coord(gz as usize) - z;
                 if (rx * c - rz * s).abs() > 0.23 || (rx * s + rz * c).abs() > 0.57 {
                     continue;
                 }
-                let depth = (self.mm(i) - (y.max(0.0) * 1000.0) as i32).min(self.height[i]);
-                let mut mass = depth.min(remaining).min(130);
-                if mass <= 0 {
+                let i = gz as usize * N + gx as usize;
+                let h = self.mm(i);
+                if h <= tooth_mm || self.height[i] == 0 {
                     continue;
                 }
-                if capture && self.load < CAPACITY {
-                    mass = mass.min(CAPACITY - self.load);
-                    self.change(i, -mass);
-                    self.load += mass;
-                } else {
-                    let sign = if inward > 0.0 { -1.0 } else { 1.0 };
-                    let jx = gx + (c * sign * 4.0).round() as i32;
-                    let jz = gz - (s * sign * 4.0).round() as i32;
-                    if !inside(jx) || !inside(jz) {
-                        continue;
-                    }
-                    let j = jz as usize * N + jx as usize;
-                    if self.base[j] > self.height[i] + self.base[i] {
-                        continue;
-                    }
-                    self.change(i, -mass);
-                    self.change(j, mass);
+                // A full bucket meets resistance from the face. Bound the new
+                // edge gradient while the neighboring sand is still supported.
+                let shoulder = Self::neighbors(i)
+                    .into_iter()
+                    .filter(|&j| self.height[j] != 0)
+                    .map(|j| self.mm(j))
+                    .max()
+                    .unwrap_or(h);
+                let available = (h - tooth_mm)
+                    .min(self.height[i])
+                    .min(130)
+                    .min(h - shoulder + REST + 28);
+                if available > 0 {
+                    sources[count] = (i, available);
+                    count += 1;
+                    demand += available;
+                    source_high = source_high.max(h);
                 }
-                remaining -= mass;
             }
         }
+        if demand == 0 {
+            return;
+        }
+        let work = demand.min(budget);
+        let captured = if capture {
+            work.min(CAPACITY - self.load)
+        } else {
+            0
+        };
+        let mut pushed = 0;
+        if work > captured {
+            // Loose soil bleeds around both bucket cheeks and forms a wedge
+            // ahead of the moving lip. Restrict every receiver using the same
+            // pre-cut neighborhood, then apportion the accepted mass by area.
+            let direction = if inward > 0.0 { -1.0 } else { 1.0 };
+            let (tx, tz) = (
+                cell(x).clamp(0, N as i32 - 1),
+                cell(z).clamp(0, N as i32 - 1),
+            );
+            let near_wall = x.abs() < 3.5 && (2.3..9.1).contains(&z);
+            let mut receivers = [(0usize, 0i32); 256];
+            let (mut receiver_count, mut capacity) = (0, 0);
+            for gz in cell(z - 1.4).max(0)..=cell(z + 1.4).min(N as i32 - 1) {
+                for gx in cell(x - 1.4).max(0)..=cell(x + 1.4).min(N as i32 - 1) {
+                    let rx = coord(gx as usize) - x;
+                    let rz = coord(gz as usize) - z;
+                    let advance = (rx * c - rz * s) * direction;
+                    let side = (rx * s + rz * c).abs();
+                    let shoulder = side > 0.57 && side < 1.14 && advance.abs() < 0.61;
+                    let nose = advance > 0.23 && advance < 1.03 && side < 0.79;
+                    if !(shoulder || nose) {
+                        continue;
+                    }
+                    let i = gz as usize * N + gx as usize;
+                    let h = self.mm(i);
+                    if self.base[i] > 0 || h > source_high + REST {
+                        continue;
+                    }
+                    if near_wall && !self.clear_route(tx, tz, gx, gz, tooth_mm) {
+                        continue;
+                    }
+                    let low = Self::neighbors(i)
+                        .into_iter()
+                        .map(|j| self.mm(j))
+                        .min()
+                        .unwrap();
+                    let allowance = (low + REST - h).min(70);
+                    if allowance > 0 {
+                        receivers[receiver_count] = (i, allowance);
+                        receiver_count += 1;
+                        capacity += allowance;
+                    }
+                }
+            }
+            pushed = (work - captured).min(capacity);
+            self.distribute(&receivers[..receiver_count], capacity, pushed);
+        }
+        self.distribute(&sources[..count], demand, -(captured + pushed));
+        self.load += captured;
+    }
+    fn spill(
+        &mut self,
+        [x, y, z]: [f32; 3],
+        [vx, vy, vz]: [f32; 3],
+        (s, c): (f32, f32),
+        pitch: f32,
+    ) {
+        // Apparent acceleration toward the mouth or over a sidewall lowers
+        // the retained free surface. Steady transport creates no spill.
+        let outward = self.tip_accel[0] * c - self.tip_accel[1] * s;
+        let lateral = self.tip_accel[0] * s + self.tip_accel[1] * c;
+        let shear =
+            ((outward - 6.5).max(0.0) * 0.020 + (lateral.abs() - 3.7).max(0.0) * 0.025).min(0.36);
+        // The actual signed angle can wrap past a half turn; an inverted cup drains.
+        let gravity_capacity = (((pitch - 0.52).cos() - 0.05) / 0.50).clamp(0.0, 1.0);
+        let retained = (CAPACITY as f32 * (gravity_capacity - shear).max(0.0)) as i32;
+        let excess = (self.load - retained).max(0);
+        if excess == 0 {
+            return;
+        }
+        // Discharge is metered over the lip. An open heaped bucket takes
+        // roughly three quarters of a second to empty during a normal tip.
+        let rate = 145 + (self.load as f32 * 0.009 + (1.0 - gravity_capacity) * 800.0) as i32;
+        let amount = excess.min(rate);
+        let parcels = ((amount + 419) / 420).clamp(1, 4) as usize;
+        if self.air.len() + parcels > MAX_AIR {
+            return;
+        }
+        for k in 0..parcels {
+            let mass =
+                amount * (k + 1) as i32 / parcels as i32 - amount * k as i32 / parcels as i32;
+            let side = (self.local_random() * 0.84 - lateral.clamp(-12.0, 12.0) * 0.009)
+                .clamp(-0.52, 0.52);
+            let scatter = self.local_random() * 0.13;
+            let lip_speed = 0.16 + (1.0 - gravity_capacity) * 0.36;
+            self.air.push(Grain {
+                x: x + s * side,
+                y: y.max(0.03),
+                z: z + c * side,
+                mass,
+                vx: vx.clamp(-5.0, 5.0) - c * lip_speed + s * (side + scatter),
+                vy: vy.clamp(-3.0, 3.0) - 0.35,
+                vz: vz.clamp(-5.0, 5.0) + s * lip_speed + c * (side + scatter),
+            });
+        }
+        self.load -= amount;
+    }
+    // Integer cumulative apportionment. Rounding changes each column by less
+    // than one unit and the total is exact, independently of scan direction.
+    fn distribute(&mut self, columns: &[(usize, i32)], total: i32, amount: i32) {
+        if amount == 0 {
+            return;
+        }
+        let (mut sum, mut previous) = (0, 0);
+        for &(i, weight) in columns {
+            sum += weight;
+            let end = sum * amount / total;
+            if end != previous {
+                self.change(i, end - previous);
+            }
+            previous = end;
+        }
+    }
+    // A parcel represents many grains. Its resting footprint is a small
+    // repose cone on the receiving surface, clipped by the concrete bay.
+    fn deposit(&mut self, impact: usize, mass: i32) {
+        if mass <= 12 {
+            self.change(impact, mass);
+            return;
+        }
+        let (cx, cz) = ((impact % N) as i32, (impact / N) as i32);
+        let near_wall =
+            (cell(-3.0)..=cell(3.0)).contains(&cx) && (cell(2.9)..=cell(8.5)).contains(&cz);
+        let radius = if mass < 160 {
+            1
+        } else if mass < 640 {
+            2
+        } else if mass < 2000 {
+            3
+        } else {
+            4
+        };
+        let mut footprint = [(0usize, 0i32); 81];
+        let (mut count, mut floor) = (0, i32::MAX);
+        for dz in -radius..=radius {
+            for dx in -radius..=radius {
+                let (x, z) = (cx + dx, cz + dz);
+                if dx * dx + dz * dz > radius * radius || !inside(x) || !inside(z) {
+                    continue;
+                }
+                if near_wall && !self.clear_route(cx, cz, x, z, self.mm(impact)) {
+                    continue;
+                }
+                let i = z as usize * N + x as usize;
+                // Octile distance tracks the radial repose slope within 8%.
+                let diagonal = dx.abs().min(dz.abs());
+                let cost = self.mm(i) + SETTLE * dx.abs().max(dz.abs()) + 33 * diagonal;
+                footprint[count] = (i, cost);
+                floor = floor.min(cost);
+                count += 1;
+            }
+        }
+        let footprint = &footprint[..count];
+        let (mut lo, mut hi) = (floor, floor + mass + 1);
+        while hi - lo > 1 {
+            let middle = (lo + hi) / 2;
+            let volume: i32 = footprint
+                .iter()
+                .map(|&(_, cost)| (middle - cost).max(0))
+                .sum();
+            if volume > mass {
+                hi = middle;
+            } else {
+                lo = middle;
+            }
+        }
+        let mut residue = mass;
+        for &(i, cost) in footprint {
+            let share = (lo - cost).max(0);
+            if share > 0 {
+                self.change(i, share);
+                residue -= share;
+            }
+        }
+        for &(i, cost) in footprint {
+            if residue == 0 {
+                break;
+            }
+            if cost <= lo {
+                self.change(i, 1);
+                residue -= 1;
+            }
+        }
+        debug_assert_eq!(residue, 0);
+    }
+    fn clear_route(&self, cx: i32, cz: i32, x: i32, z: i32, clearance: i32) -> bool {
+        let dx = x - cx;
+        let dz = z - cz;
+        let steps = dx.abs().max(dz.abs());
+        for k in 1..=steps {
+            let tx = cx + (dx * k + dx.signum() * (steps / 2)) / steps;
+            let tz = cz + (dz * k + dz.signum() * (steps / 2)) / steps;
+            if self.base[tz as usize * N + tx as usize] > clearance {
+                return false;
+            }
+        }
+        true
     }
     pub fn tick(&mut self) {
         for k in 0..T * T {
@@ -328,13 +545,17 @@ impl World {
             let i = b as usize * N + a as usize;
             if p.y <= self.surface(p.x, p.z) {
                 let (ax, az) = (cell(prev.0), cell(prev.1));
-                let prior = az as usize * N + ax as usize;
+                let prior = if inside(ax) && inside(az) {
+                    az as usize * N + ax as usize
+                } else {
+                    i
+                };
                 let dest = if self.base[i] > self.base[prior] && p.y < self.base[i] as f32 * 0.001 {
                     prior
                 } else {
                     i
                 };
-                self.change(dest, p.mass);
+                self.deposit(dest, p.mass);
                 self.air.swap_remove(k);
             } else {
                 self.air[k] = p;
@@ -380,6 +601,17 @@ pub extern "C" fn world_ground(w: &World, x: f32, z: f32) -> f32 {
     w.surface(x, z)
 }
 #[no_mangle]
+pub extern "C" fn world_bearing(w: &World, x: f32, z: f32) -> f32 {
+    let (cx, cz) = (cell(x), cell(z));
+    if !inside(cx) || !inside(cz) {
+        return 0.;
+    }
+    let i = cz as usize * N + cx as usize;
+    // Allow up to 65 mm of shoe seating, limited by remaining compressible depth.
+    let loose = ((w.height[i] as i64 * (255 - i64::from(w.compact[i]))) >> 11).min(65) as i32;
+    (w.mm(i) - loose) as f32 * 0.001
+}
+#[no_mangle]
 pub extern "C" fn world_height(w: &World) -> *const i32 {
     w.height.as_ptr()
 }
@@ -390,6 +622,18 @@ pub extern "C" fn world_compact(w: &World) -> *const u8 {
 #[no_mangle]
 pub extern "C" fn world_tracks(w: &mut World, x: f32, z: f32, yaw: f32) {
     w.tracks(x, z, yaw)
+}
+#[no_mangle]
+pub extern "C" fn world_track_contact(
+    w: &mut World,
+    x: f32,
+    z: f32,
+    yaw: f32,
+    y: f32,
+    fore: f32,
+    lateral: f32,
+) {
+    w.track_contact(x, z, yaw, [y, fore, lateral]);
 }
 #[no_mangle]
 pub extern "C" fn world_dirty(w: &World) -> *const u8 {
@@ -414,6 +658,10 @@ pub extern "C" fn world_air_len(w: &World) -> usize {
 #[no_mangle]
 pub extern "C" fn world_load(w: &World) -> i32 {
     w.load
+}
+#[no_mangle]
+pub extern "C" fn bucket_capacity() -> i32 {
+    CAPACITY
 }
 #[no_mangle]
 pub extern "C" fn world_bay(w: &World) -> i32 {
@@ -486,6 +734,214 @@ pub extern "C" fn replay_step(w: &mut World, frame: u32) {
 mod tests {
     use super::*;
     #[test]
+    fn full_bucket_drag_leaves_a_low_berm_and_relaxes_when_held() {
+        let mut sparse = World::new(false);
+        let mut dense = World::new(true);
+        for world in [&mut sparse, &mut dense] {
+            // Begin with a load carried in from outside the quarry.
+            world.load = CAPACITY;
+            world.initial += i64::from(CAPACITY);
+        }
+        let original = sparse.height.clone();
+        let (mut peak_rise, mut peak_lip, mut settled_lip) = (0, 0, 0);
+        let mut cut = 0i64;
+        for frame in 0..360 {
+            // Constant travel through the working face, then decelerate into
+            // the hold; this isolates displacement from an emergency-stop spill.
+            let brake = ((frame as f32 - 100.0) / 24.0).clamp(0.0, 1.0);
+            let travel = frame.min(100) as f32 + 24.0 * (brake - 0.5 * brake * brake);
+            let x = 6.9 - 3.6 * travel / 112.0;
+            for world in [&mut sparse, &mut dense] {
+                world.tool(x, 0.54, -0.37, 0.0, 0.5);
+                world.tick();
+            }
+            assert_eq!(
+                sparse.height, dense.height,
+                "full-bucket drag frame {frame}"
+            );
+            assert_eq!(sparse.balance(), 0);
+            assert_eq!(sparse.load, CAPACITY);
+            let mut lip = 0;
+            cut = 0;
+            for z in cell(-2.4)..=cell(1.6) {
+                for x in cell(1.8)..=cell(8.4) {
+                    let i = z as usize * N + x as usize;
+                    let rise = sparse.height[i] - original[i];
+                    if rise > 0 {
+                        peak_rise = peak_rise.max(rise);
+                        for neighbor in [i - 1, i + 1, i - N, i + N] {
+                            lip = lip.max(sparse.mm(i) - sparse.mm(neighbor));
+                        }
+                    } else {
+                        cut -= i64::from(rise);
+                    }
+                }
+            }
+            peak_lip = peak_lip.max(lip);
+            settled_lip = lip;
+        }
+        println!("full drag peak rise={peak_rise} mm; peak lip={peak_lip} mm/125 mm; settled lip={settled_lip} mm; displaced={cut}");
+        assert!(
+            cut > 10_000 && peak_rise > 5,
+            "full bucket should still plow soil"
+        );
+        assert!(
+            peak_rise < 225,
+            "full-bucket drag built a spike {peak_rise} mm high"
+        );
+        assert!(peak_lip < 200, "one-cell spike at the tool {peak_lip} mm");
+        assert!(settled_lip <= REST);
+    }
+    #[test]
+    fn steady_fast_transport_and_lifting_retain_the_load() {
+        for &(dx, dy, dz) in &[
+            (0.13, 0.0, 0.0),
+            (0.0, 0.12, 0.0),
+            (0.0, 0.0, 0.11),
+            (0., 0., 0.),
+        ] {
+            let mut w = World::new(false);
+            w.load = CAPACITY;
+            w.initial += i64::from(CAPACITY);
+            for n in 0..42 {
+                w.tool(
+                    -8.0 + dx * n as f32,
+                    4.0 + dy * n as f32,
+                    -7.0 + dz * n as f32,
+                    0.0,
+                    0.55,
+                );
+                w.tick();
+            }
+            assert_eq!(w.load, CAPACITY, "velocity = {dx},{dy},{dz}");
+            assert!(w.air.is_empty());
+            assert_eq!(w.balance(), 0);
+        }
+    }
+    #[test]
+    fn sideways_acceleration_slips_over_the_cheek_but_a_light_load_stays_in() {
+        for load in [CAPACITY, CAPACITY / 3] {
+            let mut w = World::new(false);
+            w.load = load;
+            w.initial += i64::from(load);
+            for frame in 0..24 {
+                let t = (frame as f32 - 4.).max(0.) * DT;
+                let angle = 0.5 * 2.4 * t * t;
+                w.tool(
+                    -5. + 5. * angle.cos(),
+                    4.,
+                    -5. - 5. * angle.sin(),
+                    angle,
+                    0.55,
+                );
+                w.tick();
+            }
+            if load == CAPACITY {
+                assert!(w.load < load - 500 && w.load > load * 2 / 3);
+            } else {
+                assert_eq!(w.load, load);
+            }
+            assert_eq!(w.balance(), 0);
+        }
+    }
+    #[test]
+    fn an_open_or_inverted_bucket_finishes_draining_and_settles() {
+        for pitch in [
+            -1.22,
+            std::f32::consts::PI - 0.02,
+            -std::f32::consts::PI + 0.02,
+        ] {
+            let mut w = World::new(false);
+            w.load = CAPACITY;
+            w.initial += i64::from(CAPACITY);
+            for _ in 0..140 {
+                w.tool(-7.0, 2.0, -6.0, 0.0, pitch);
+                w.tick();
+            }
+            assert_eq!(w.load, 0);
+            assert!(w.air.is_empty());
+            assert_eq!(w.balance(), 0);
+        }
+        let mut w = World::new(false);
+        w.load = 11;
+        w.initial += 11;
+        for _ in 0..100 {
+            w.tool(-5., 1., -5., 0., -1.3);
+            w.tick();
+        }
+        assert_eq!((w.load, w.air.len(), w.balance()), (0, 0, 0));
+    }
+    #[test]
+    fn impact_forms_a_repose_footprint_and_stays_on_its_side_of_concrete() {
+        let mut w = World::new(false);
+        let impact = cell(-6.0) as usize * N + cell(-6.0) as usize;
+        w.initial += 2800;
+        w.deposit(impact, 2800);
+        let neighborhood = (-4..=4).flat_map(|dz| {
+            (-4..=4).map(move |dx| (impact as isize + dz * N as isize + dx) as usize)
+        });
+        let mut footprint = 0;
+        let mut crest = 0;
+        let mut relief = 0;
+        for i in neighborhood {
+            let high = w.height[i];
+            footprint += usize::from(high > 0);
+            crest = crest.max(high);
+            relief = relief
+                .max(high - w.height[i + 1])
+                .max(high - w.height[i - 1]);
+        }
+        assert!(
+            footprint > 15 && crest < 310 && relief <= REST,
+            "footprint={footprint} crest={crest} relief={relief}"
+        );
+        let bay_before = w.bay;
+        let beside_wall = cell(5.1) as usize * N + cell(2.13) as usize;
+        w.initial += 2800;
+        w.deposit(beside_wall, 2800);
+        assert_eq!(w.bay, bay_before);
+        assert_eq!(w.balance(), 0);
+        println!("landed 2800 units across {footprint} cells; crest={crest} mm; axial relief={relief} mm");
+    }
+    #[test]
+    fn a_symmetric_full_bucket_cut_pushes_on_both_cheeks() {
+        let mut w = World::new(false);
+        w.height.fill(600);
+        w.load = CAPACITY;
+        let before = w.height.clone();
+        w.tool(-4., 0.2, -5., 0., 0.5);
+        w.tool(-4.015, 0.2, -5., 0., 0.5);
+        let (mut left, mut right) = (0, 0);
+        for gz in cell(-6.2)..=cell(-3.8) {
+            for gx in cell(-5.2)..=cell(-2.8) {
+                let i = gz as usize * N + gx as usize;
+                let banked = (w.height[i] - before[i]).max(0);
+                if coord(gz as usize) < -5. {
+                    left += banked;
+                } else {
+                    right += banked;
+                }
+            }
+        }
+        assert!(
+            left > 450 && right > 450 && (left - right).abs() < 6,
+            "left/right share on a level bed: {left}/{right}"
+        );
+    }
+    #[test]
+    fn a_cut_can_reach_the_last_cells_inside_the_quarry() {
+        let mut w = World::new(false);
+        let row = cell(-6.) as usize * N;
+        for i in row..row + 6 {
+            w.height[i] = 800;
+            w.initial += 800;
+        }
+        w.tool(-15.8, 0.25, -6., 0., 0.5);
+        w.tool(-15.95, 0.25, -6., 0., 0.5);
+        assert!(w.load > 0 && w.height[row] < 800);
+        assert_eq!(w.balance(), 0);
+    }
+    #[test]
     fn replay_conserves_mass_and_matches_full_grid_each_step() {
         let mut sparse = World::new(false);
         let mut dense = World::new(true);
@@ -529,6 +985,23 @@ mod tests {
             w.tracks(5.4, 0.0, 0.0);
         }
         assert!(w.surface(5.4, 1.1) < original * 0.90);
+        assert_eq!(w.balance(), 0);
+    }
+    #[test]
+    fn bridged_shoes_only_compact_soil_in_contact() {
+        let mut w = World::new(false);
+        let i = cell(1.1) as usize * N + cell(5.4) as usize;
+        let level = w.mm(i) as f32 * 0.001;
+        let bearing = world_bearing(&w, 5.4, 1.1);
+        assert!((level - bearing - 0.065).abs() < 0.001);
+        w.track_contact(5.4, 0., 0., [level + 0.2, 0., 0.]);
+        assert_eq!(w.compact[i], 0);
+        for _ in 0..24 {
+            w.track_contact(5.4, 0., 0., [bearing, 0., 0.]);
+        }
+        assert!(w.compact[i] > 0);
+        assert!(w.mm(i) as f32 * 0.001 >= bearing - 0.055);
+        assert_eq!(world_bearing(&w, -4., -4.), 0.);
         assert_eq!(w.balance(), 0);
     }
     #[test]

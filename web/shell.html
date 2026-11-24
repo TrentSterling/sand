@@ -64,6 +64,7 @@
         <div><dt>Swing</dt><dd><kbd>Q</kbd> <kbd>A</kbd></dd></div>
         <div><dt>Drive / steer</dt><dd>Arrow keys</dd></div>
         <div><dt>Orbit / zoom</dt><dd>Drag / scroll</dd></div>
+        <div><dt>Cut view</dt><dd>Drag the teeth in side view. Hold R or F to change the lip angle.</dd></div>
       </dl>
       <div class="panel-actions">
         <button id="offline">Download offline</button><button id="reset">Reset quarry</button><button id="audio">Sound off</button>
@@ -73,6 +74,7 @@
     <section class="station" aria-label="Machine controls">
       <div class="station-top">
         <p id="feedback" role="status">Dig into the bank to pick up your first load.</p>
+        <button id="cutView" aria-pressed="false" title="Side view with drag-to-dig controls">Cut view</button>
         <button id="manual" aria-controls="manualPanel" aria-expanded="false" title="Switch between assisted and manual controls">Manual</button>
       </div>
       <div id="assistPanel" class="assist-controls" role="group" aria-label="Assisted controls">

@@ -1,11 +1,11 @@
 {
   "controlChangedPixels": 16384,
   "orderDifferences": {
-    "dig-front": 0,
+    "dig-front": 1,
     "dig-rear": 0,
     "dig-cab": 0,
     "dig-service": 0,
-    "dig-top": 1,
+    "dig-top": 2,
     "dig-under": 0,
     "dig-oblique": 3,
     "carry-front": 0,
@@ -14,14 +14,14 @@
     "carry-service": 0,
     "carry-top": 0,
     "carry-under": 0,
-    "carry-oblique": 2,
+    "carry-oblique": 4,
     "dump-front": 0,
     "dump-rear": 0,
     "dump-cab": 0,
     "dump-service": 0,
     "dump-top": 0,
     "dump-under": 0,
-    "dump-oblique": 2
+    "dump-oblique": 4
   },
   "pixelsPerView": 409600
 }

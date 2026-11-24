@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#18201e">
+  <title>Excavator comparison | SandLab</title>
+  <style>
+    :root{color-scheme:dark;--paper:#f2efe3;--muted:#bac0af;--amber:#f2bf60;--line:#50574e;font:16px/1.45 Barlow,Bahnschrift,Arial,sans-serif;background:#17201e;color:var(--paper)}
+    *{box-sizing:border-box}body{margin:0}header,main{max-width:1600px;margin:auto;padding:1.4rem clamp(1rem,3.5vw,4rem)}header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line)}header strong{font-size:1.1rem;letter-spacing:.1em}a{color:var(--amber);text-underline-offset:.2em}nav{display:flex;gap:1.2rem}h1{margin:0 0 1rem;font-size:clamp(1.7rem,3vw,2.8rem);line-height:1.1}
+    button,select{font:inherit;border:1px solid var(--line);border-radius:.25rem;background:#26312d;color:var(--paper);padding:.46rem .75rem;cursor:pointer}button:hover,select:hover{border-color:var(--amber)}:focus-visible{outline:2px solid var(--amber);outline-offset:3px}.tools{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin-bottom:1.15rem}.tools label{color:var(--muted);margin-right:.35rem}.pair{display:grid;grid-template-columns:1fr 1fr;gap:1rem}figure{margin:0;min-width:0}figure img,video{display:block;width:100%;height:auto;background:#242b27}figcaption{margin:.55rem 0;color:var(--muted);font-size:.93rem}figcaption strong{color:var(--paper);display:block;font-size:1.05rem}.movie-labels{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:.5rem 0;color:var(--paper)}p{color:var(--muted);max-width:78ch}small{color:var(--muted)}[hidden]{display:none!important}@media(max-width:700px){.pair{grid-template-columns:1fr}.tools label{display:none}.tools select{max-width:65vw}header{padding-block:.9rem}nav{gap:.8rem}}
+  </style>
+</head>
+<body>
+  <header><strong>SANDLAB</strong><nav><a href="../">Play</a><a href="https://github.com/TrentSterling/sand/blob/main/GAUNTLET.md">Read the critique</a></nav></header>
+  <main>
+    <h1>Excavator comparison</h1>
+    <div class="tools"><label for="view">View</label><select id="view"><option value="cycle">Full dig to dump</option></select><button id="back" aria-label="Previous view">←</button><button id="next" aria-label="Next view">→</button></div>
+    <section id="motion">
+      <div class="movie-labels"><strong>First build</strong><strong>Revised machine</strong></div>
+      <video controls playsinline preload="metadata" width="1600" height="480" src="cycle.mp4" aria-label="Synchronized excavation comparison"></video>
+      <p>Both machines receive the same four commands on the same simulation ticks. Scrub through the cut and watch the bucket opening, then follow the falling sand into the bay.</p>
+    </section>
+    <section class="pair" id="stills" aria-label="Matched camera views" hidden></section>
+    <p id="hint" hidden>Open either image at full size to inspect the teeth, cylinder eyes or contact patches. The stills match working phases and use the same camera in both builds.</p>
+    <p id="error" role="status"></p>
+  </main>
+  <script>
+    const pick=document.getElementById('view'), stills=document.getElementById('stills');
+    const motion=document.getElementById('motion'), hint=document.getElementById('hint');
+    function show(){
+      const id=location.hash.slice(1);
+      const shot=shots.find(s=>s.id===id);
+      pick.value=shot?id:'cycle';
+      motion.hidden=!!shot;stills.hidden=hint.hidden=!shot;
+      if(!shot)return;
+      motion.querySelector('video').pause();
+      stills.replaceChildren();
+      ['baseline','candidate'].forEach((key,i)=>{
+        const card=document.createElement('figure'),a=document.createElement('a'),img=document.createElement('img');
+        a.href=key+'/'+id+'.webp';img.src=a.href;img.alt=(i?'Revised machine':'First build')+', '+shot.label;
+        img.width=1600;img.height=960;a.append(img);
+        const caption=document.createElement('figcaption'),label=document.createElement('strong');
+        label.textContent=i?'Revised machine':'First build';
+        caption.append(label,document.createTextNode('Tick '+shot.frames[i]+' · In bucket '+(shot.bucket[i]/64000).toFixed(2)+' m³ · In bay '+(shot.bay[i]/64000).toFixed(2)+' m³'));
+        card.append(a,caption);stills.append(card);
+      });
+    }
+    let shots=[];
+    fetch('captures.json').then(response=>{if(!response.ok)throw Error();return response.json()}).then(data=>{
+      shots=data.shots;
+      for(const [key,title] of [['working views','Around the machine'],['dig to dump','Cycle stages']]){
+        const group=document.createElement('optgroup');group.label=title;
+        for(const s of shots.filter(s=>s.section===key).sort((a,b)=>a.id.localeCompare(b.id)))group.append(new Option(s.label,s.id));
+        pick.append(group);
+      }
+      show();
+    }).catch(()=>{document.getElementById('error').textContent='Could not load the capture index. Open this gallery on tront.xyz/sand/review/.'});
+    pick.onchange=()=>{location.hash=pick.value};
+    for(const [id,direction] of [['back',-1],['next',1]])document.getElementById(id).onclick=()=>{
+      pick.selectedIndex=(pick.selectedIndex+direction+pick.length)%pick.length;location.hash=pick.value;
+    };
+    addEventListener('hashchange',show);
+  </script>
+</body>
+</html>

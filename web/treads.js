@@ -38,7 +38,7 @@ function shoeTexture(T) {
 
 // world_ground returns the nearest cell's surface. Match the terrain renderer's
 // interpolated triangles when setting the ends of a grouser on a bank.
-function renderedHeight(ground, x, z) {
+export function renderedHeight(ground, x, z) {
   const px = x / GRID_STEP - 0.5,
     pz = z / GRID_STEP - 0.5;
   const ix = Math.floor(px),
@@ -134,7 +134,7 @@ export function createTreads(T, scene) {
     upload(slot, 1);
     head = (head + 1) % MAX_PRINTS;
   }
-  function update(x, z, yaw, ground) {
+  function update(x, z, yaw, ground, shoeTouches = () => true) {
     if (!seeded) {
       lastX = x;
       lastZ = z;
@@ -160,12 +160,9 @@ export function createTreads(T, scene) {
         for (let d = PITCH - remainder[side]; d <= distance; d += PITCH) {
           const t = d / distance;
           const a = lastYaw + dyaw * t;
-          stamp(
-            lastX + dx * t + offset * Math.sin(a),
-            lastZ + dz * t + offset * Math.cos(a),
-            a,
-            ground,
-          );
+          const px = lastX + dx * t + offset * Math.sin(a),
+            pz = lastZ + dz * t + offset * Math.cos(a);
+          if (shoeTouches(px, pz)) stamp(px, pz, a, ground);
         }
         remainder[side] = (remainder[side] + distance) % PITCH;
       }

@@ -180,25 +180,6 @@ export function createQuarry(T, scene) {
     return new T.Color(hex).multiplyScalar(factor);
   }
 
-  // Detached floor apron sits below the simulation surface, outside its domain.
-  const lo = -16,
-    hi = 16,
-    outer = 76;
-  function floorPanel(x0, z0, x1, z1) {
-    quad(
-      rock,
-      vec(x0, -0.08, z0),
-      vec(x0, -0.08, z1),
-      vec(x1, -0.08, z1),
-      vec(x1, -0.08, z0),
-      0xc8ac83,
-    );
-  }
-  floorPanel(-outer, -outer, lo, outer);
-  floorPanel(hi, -outer, outer, outer);
-  floorPanel(lo, -outer, hi, lo);
-  floorPanel(lo, hi, hi, outer);
-
   // Each terrace shares both contours with the adjoining strata. The broad
   // eastern notch is the access ramp cut through the benches.
   const cuts = [
