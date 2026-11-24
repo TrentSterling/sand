@@ -37,7 +37,7 @@ On an Intel Core Ultra 9 285K under Windows, 21 paired repetitions of the 720-ti
 | Active tiles | 0.874 ms | 0.952 ms | 352,384 |
 | Full grid | 32.359 ms | 32.678 ms | 23,500,800 |
 
-Both runs ended with material hash `7eab9f1f` and zero mass error. In Chrome at 1440 × 900 on an RTX 5070 Ti, the two delivery jobs measured 16.7 ms median and 16.8 ms p95 between animation frames. The browser's quarry-wide avalanche took 19.9 ms with active tiles and 38.4 ms with a full scan over the complete 360-tick replay. The final material states matched. [Browser playtest and timing receipt](evidence/browser.json)
+Both runs ended with material hash `7eab9f1f` and zero mass error. In Chrome at 1440 × 900 on an RTX 5070 Ti, the two delivery jobs measured 16.7 ms median and 16.8 ms p95 between animation frames. The browser's quarry-wide avalanche took 20.4 ms with active tiles and 38.1 ms with a full scan over the complete 360-tick replay. The final material states matched. [Browser playtest and timing receipt](evidence/browser.json)
 
 ## The excavator
 

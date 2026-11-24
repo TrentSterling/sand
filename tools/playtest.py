@@ -28,7 +28,7 @@ with sync_playwright() as pw:
         }requestAnimationFrame(sample);}""")
     errors, requests = [], []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
+    page.on("console", lambda msg: errors.append(f"{msg.text} ({msg.location['url']})") if msg.type == "error" else None)
     page.on("request", lambda req: requests.append(req.url))
     page.goto(args.url, wait_until="load")
     page.wait_for_function("window.sandLab && window.sandLab.state().frame>20",timeout=45000)
