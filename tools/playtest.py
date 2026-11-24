@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--url", default=(ROOT / "index.html").as_uri())
 parser.add_argument("--out", default=str(ROOT / ".work" / "playtest"))
 args = parser.parse_args()
-out = Path(args.out)
+out = Path(args.out).resolve()
 out.mkdir(parents=True, exist_ok=True)
 state = "() => window.sandLab.state()"
 
