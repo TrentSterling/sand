@@ -1,0 +1,49 @@
+{
+    "artifact":  "index.html",
+    "sha256":  "f94b606434d2b1859e7db5eaee3a0c318feab2197547afd34d4b0d6a83e966e0",
+    "browser":  "157.0.8103.80",
+    "graphics":  "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "cpu":  "Intel Core Ultra 9 285K",
+    "viewport":  [
+                     1440,
+                     900
+                 ],
+    "framePacing":  {
+                        "frameSamples":  2201,
+                        "medianFrameMs":  16.69999999999709,
+                        "p95FrameMs":  16.799999999999272
+                    },
+    "playerReplay":  {
+                         "source":  "Your dig",
+                         "ticks":  785,
+                         "sparseMs":  1.9000003337860107,
+                         "denseMs":  61.700000047683716,
+                         "pairs":  [
+                                       355968,
+                                       25622528
+                                   ],
+                         "match":  true,
+                         "massError":  0
+                     },
+    "avalanche":  {
+                      "source":  "Quarry-wide avalanche",
+                      "ticks":  360,
+                      "sparseMs":  19.90000009536743,
+                      "denseMs":  38.40000033378601,
+                      "pairs":  [
+                                    4395744,
+                                    11750400
+                                ],
+                      "match":  true,
+                      "massError":  0
+                  },
+    "bothJobsComplete":  true,
+    "offlineOrderComplete":  true,
+    "offlineDownloadBytes":  836380,
+    "offlineNetworkRequests":  [
+
+                               ],
+    "browserErrors":  [
+
+                      ]
+}

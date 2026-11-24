@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.png binary
+# The generated bundle contains literal shader strings from Three.js.
+index.html -whitespace

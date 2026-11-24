@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#18201e">
+  <meta name="description" content="Run a tracked excavator in a working sand quarry. Scoop, swing, tip the load and inspect the CPU simulation.">
+  <title>SandLab | Quarry</title>
+  <style>/*__CSS__*/</style>
+</head>
+<body>
+  <main id="quarryView" aria-label="SandLab excavation sandbox">
+    <canvas id="view" tabindex="0" aria-label="Excavation quarry. Drag to orbit, or use the machine controls below."></canvas>
+    <noscript><p class="startup-message">Enable JavaScript to operate the excavator.</p></noscript>
+
+    <header class="toolbar">
+      <div class="brand">
+        <i class="brand-mark" aria-hidden="true"></i>
+        <h1>Sand<span>Lab</span></h1>
+      </div>
+      <nav class="instruments" aria-label="Operator tools">
+        <span id="fps" class="frame-rate" aria-label="Frame rate">… fps</span>
+        <button id="labToggle" aria-controls="lab" aria-expanded="false">CPU lab</button>
+        <button id="helpToggle" aria-controls="help" aria-expanded="false">Help</button>
+      </nav>
+    </header>
+
+    <section class="work-order" aria-label="Current job">
+      <h2 id="goal">Load the weigh bay</h2>
+      <button id="nextJob" class="primary" hidden>Next order</button>
+      <dl class="quantities">
+        <div><dt>Delivered</dt><dd id="delivered">0.00 m³</dd></div>
+        <div><dt>In bucket</dt><dd id="bucketFill">0.00 m³</dd></div>
+      </dl>
+    </section>
+
+    <aside id="lab" class="panel" aria-labelledby="labTitle" hidden>
+      <h2 id="labTitle">CPU lab</h2>
+      <dl class="telemetry">
+        <div><dt>Simulation step</dt><dd id="simTime">…</dd></div>
+        <div><dt>Cells visited</dt><dd id="visited">…</dd></div>
+        <div><dt>Mass error</dt><dd id="massError">…</dd></div>
+        <div><dt>Terrain update</dt><dd id="meshTime">…</dd></div>
+        <div><dt>Terrain upload</dt><dd id="upload">…</dd></div>
+        <div><dt>Draw calls</dt><dd id="draws">…</dd></div>
+      </dl>
+      <label class="replay-select">Replay <select id="scenario"><option value="player">My dig</option><option value="reference">Reference dig</option><option value="avalanche">Quarry-wide avalanche</option></select></label>
+      <button id="bench" class="primary">Compare sparse / dense</button>
+      <output id="benchResult" aria-live="polite"></output>
+      <div class="panel-actions">
+        <button id="pause">Pause</button><button id="step">Single step</button><button id="tiles" aria-pressed="false">Active tiles</button>
+      </div>
+    </aside>
+
+    <aside id="help" class="panel" aria-labelledby="helpTitle" hidden>
+      <h2 id="helpTitle">Operator guide</h2>
+      <p>Dig into the bank, lift, swing to the weigh bay and dump. Use the assisted controls below or work each joint in manual mode.</p>
+      <dl class="keymap">
+        <div><dt>Assisted cycle</dt><dd><kbd>1</kbd> to <kbd>4</kbd></dd></div>
+        <div><dt>Boom</dt><dd><kbd>W</kbd> <kbd>S</kbd></dd></div>
+        <div><dt>Stick</dt><dd><kbd>E</kbd> <kbd>D</kbd></dd></div>
+        <div><dt>Bucket</dt><dd><kbd>R</kbd> <kbd>F</kbd></dd></div>
+        <div><dt>Swing</dt><dd><kbd>Q</kbd> <kbd>A</kbd></dd></div>
+        <div><dt>Drive / steer</dt><dd>Arrow keys</dd></div>
+        <div><dt>Orbit / zoom</dt><dd>Drag / scroll</dd></div>
+      </dl>
+      <div class="panel-actions">
+        <button id="offline">Download offline</button><button id="reset">Reset quarry</button><button id="audio">Sound off</button>
+      </div>
+    </aside>
+
+    <section class="station" aria-label="Machine controls">
+      <div class="station-top">
+        <p id="feedback" role="status">Dig into the bank to pick up your first load.</p>
+        <button id="manual" aria-controls="manualPanel" aria-expanded="false" title="Switch between assisted and manual controls">Manual</button>
+      </div>
+      <div id="assistPanel" class="assist-controls" role="group" aria-label="Assisted controls">
+        <button data-action="dig"><kbd>1</kbd> Dig</button>
+        <button data-action="lift"><kbd>2</kbd> Lift</button>
+        <button data-action="swing"><kbd>3</kbd> Swing</button>
+        <button data-action="dump"><kbd>4</kbd> Dump</button>
+      </div>
+      <div id="manualPanel" class="manual-controls" role="group" aria-label="Hold to move machine" hidden>
+        <fieldset><legend>Boom</legend><div><button data-hold="boomUp">Up</button><button data-hold="boomDown">Down</button></div></fieldset>
+        <fieldset><legend>Stick</legend><div><button data-hold="stickOut">Out</button><button data-hold="stickIn">In</button></div></fieldset>
+        <fieldset><legend>Bucket</legend><div><button data-hold="curlIn">Curl</button><button data-hold="curlOut">Tip</button></div></fieldset>
+        <fieldset><legend>Swing</legend><div><button data-hold="left">Left</button><button data-hold="right">Right</button></div></fieldset>
+        <fieldset><legend>Travel</legend><div><button data-hold="driveForward">Fwd</button><button data-hold="driveBack">Rev</button></div></fieldset>
+        <fieldset><legend>Steer</legend><div><button data-hold="steerLeft">Left</button><button data-hold="steerRight">Right</button></div></fieldset>
+      </div>
+    </section>
+  </main>
+  <script id="wasm" type="application/octet-stream">__WASM64__</script>
+  <script>/*__GAME__*/</script>
+</body>
+</html>
