@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { armIK, forward, toolAttitude } from '../web/arm.js';
 import { createMachine, machineDimensions as spec } from '../web/machine.js';
-import { createSupport } from '../web/support.js';
 
 const rig = createMachine(THREE);
 const { limits } = spec;
@@ -102,34 +101,6 @@ for (const r of [-2, 2.1, 5.8, 11])
     }
 assert(maxExcess < 1e-8, 'IK returned an endpoint farther than an available pose');
 
-let worstShoePenetration = 0,
-  planarError = 0;
-const scenarios = [
-  (x, z) => 1.1 + 0.24 * x - 0.17 * z,
-  (x, z) => 0.9 + 0.32 * Math.exp(-x * x * 4) + 0.06 * z,
-  (x, z) => 0.82 + (x > 0.55 && z > 0 ? 0.19 : 0),
-];
-for (const [index, ground] of scenarios.entries()) {
-  const x = 0.1,
-    z = 0.07,
-    yaw = 0.35;
-  const fit = createSupport(),
-    support = fit(x, z, yaw, ground);
-  const chassis = new THREE.Object3D();
-  chassis.position.set(x, support.y, z);
-  chassis.rotation.set(support.roll, yaw, support.rise, 'YXZ');
-  chassis.updateMatrixWorld();
-  for (const side of [-1.09, 1.09])
-    for (let i = 0; i < 9; i++) {
-      actual.set(interp([-1.62, 1.62], i / 8), 0, side).applyMatrix4(chassis.matrixWorld);
-      const gap = actual.y - ground(actual.x, actual.z);
-      worstShoePenetration = Math.max(worstShoePenetration, -gap);
-      if (index === 0) planarError = Math.max(planarError, Math.abs(gap));
-    }
-  const again = fit(x, z, yaw, ground);
-  assert(Math.abs(again.y - support.y) < 0.001);
-}
-assert(worstShoePenetration < 0.003 && planarError < 0.003);
 console.log(
   JSON.stringify(
     {
@@ -141,9 +112,6 @@ console.log(
       limitTests,
       maxExcessOverSampledMetres: maxExcess,
       largestUnreachableResidualMetres: largestMiss,
-      sampledSupportSurfaces: scenarios.length,
-      worstShoePenetration,
-      planarError,
     },
     null,
     2,

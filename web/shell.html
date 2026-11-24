@@ -38,6 +38,10 @@
     <aside id="lab" class="panel" aria-labelledby="labTitle" hidden>
       <h2 id="labTitle">CPU lab</h2>
       <dl class="telemetry">
+        <div><dt>Operating mass</dt><dd id="machineMass">20.40 t</dd></div>
+        <div><dt>Left / right track load</dt><dd id="trackLoad">0 / 0 kN</dd></div>
+        <div><dt>Travel speed</dt><dd id="travelSpeed">0.0 km/h</dd></div>
+        <div><dt>Chassis step</dt><dd id="chassisTime">0 ms</dd></div>
         <div><dt>Simulation step</dt><dd id="simTime">…</dd></div>
         <div><dt>Cells visited</dt><dd id="visited">…</dd></div>
         <div><dt>Mass error</dt><dd id="massError">…</dd></div>
@@ -48,6 +52,7 @@
       <label class="replay-select">Replay <select id="scenario"><option value="player">My dig</option><option value="reference">Reference dig</option><option value="avalanche">Quarry-wide avalanche</option></select></label>
       <button id="bench" class="primary">Compare sparse / dense</button>
       <output id="benchResult" aria-live="polite"></output>
+      <button id="forces" aria-pressed="false" title="Show the center of mass and normal forces under the tracks">Track forces</button>
       <div class="panel-actions">
         <button id="pause">Pause</button><button id="step">Single step</button><button id="tiles" aria-pressed="false">Active tiles</button>
       </div>

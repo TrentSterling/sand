@@ -2,6 +2,7 @@
 import argparse
 import io
 import json
+import math
 from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 from playwright.sync_api import sync_playwright
@@ -163,6 +164,7 @@ with sync_playwright() as pw:
     page.wait_for_function("window.sandLab.lastBenchmark !== null",timeout=30000)
     bench=page.evaluate("window.sandLab.lastBenchmark")
     assert bench["match"] and bench["massError"]==0 and bench["pairs"][0]<bench["pairs"][1]
+    if bench.get("liveMatch") is not None: assert bench["liveMatch"]
     page.locator("#scenario").select_option("avalanche")
     page.locator("#bench").click()
     page.wait_for_function("window.sandLab.lastBenchmark?.source==='Quarry-wide avalanche'")
@@ -182,11 +184,14 @@ with sync_playwright() as pw:
     assert page.evaluate(state)["done"],page.evaluate(state)
     page.locator("#nextJob").click()
     assert page.evaluate(state)["job"]==2
+    parked=page.evaluate(state)
     page.keyboard.down("ArrowDown")
-    page.wait_for_timeout(500)
+    page.wait_for_function("f=>window.sandLab.state().frame>=f+40",arg=parked["frame"])
     page.keyboard.up("ArrowDown")
     moved=page.evaluate(state)
-    assert moved["manual"] and moved["base"]["x"]<-.15
+    dx=moved["base"]["x"]-parked["base"]["x"]
+    dz=moved["base"]["z"]-parked["base"]["z"]
+    assert moved["manual"] and dx*math.cos(parked["trackYaw"])-dz*math.sin(parked["trackYaw"])<-.15,(parked,moved)
     angle=moved["pose"]["boom"]
     page.keyboard.down("w");page.wait_for_timeout(250);page.keyboard.up("w")
     assert abs(page.evaluate(state)["pose"]["boom"]-angle)>.02

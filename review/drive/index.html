@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#18201e"><title>Crest test | SandLab</title>
+<style>
+:root{color-scheme:dark;background:#19201d;color:#f0edde;font:16px/1.45 Barlow,Bahnschrift,Arial,sans-serif}*{box-sizing:border-box}
+body{margin:0}header,main{max-width:1500px;margin:auto;padding:1.2rem clamp(1rem,4vw,4rem)}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #50574c}header strong{letter-spacing:.12em}nav,.actions{display:flex;flex-wrap:wrap;gap:1rem;align-items:center}a{color:#f2bf60}h1,h2{line-height:1.1;margin:.8em 0 .35em}h1{font-size:clamp(2rem,4vw,3.4rem)}p,figcaption{color:#c4c9be}p{max-width:76ch}button,select{color:inherit;background:#29322d;border:1px solid #626c5e;border-radius:3px;padding:.48rem .75rem;font:inherit}button{cursor:pointer}button:hover,select:hover{border-color:#e2af58}:focus-visible{outline:2px solid #f2bf60;outline-offset:3px}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}figure{margin:.7rem 0}figure img,video{display:block;width:100%;height:auto;background:#252e28}figcaption{margin:.35rem 0}.force{max-width:850px}@media(max-width:700px){.pair{grid-template-columns:1fr}.actions{gap:.55rem}header{gap:.8rem}}
+</style></head>
+<body>
+<header><strong>SANDLAB</strong><nav><a href="../../">Play</a><a href="../">Excavator review</a></nav></header>
+<main><h1>Driving over the crest</h1>
+<p>Both operators raise the boom and brake at the same point on the stockpile. They slew the house across the slope, drive forward again, reverse, and stop at the same return marker. The films run at simulation speed.</p>
+<div class="actions"><button id="start">Play both from start</button><button id="brake">Compare from braking</button><button id="pause">Pause both</button></div>
+<div class="pair">
+<figure><video id="old" controls playsinline muted preload="metadata" poster="baseline-approach.webp" src="baseline.mp4"></video><figcaption>0.2 · Terrain-fitted chassis</figcaption></figure>
+<figure><video id="current" controls playsinline muted preload="metadata" poster="candidate-approach.webp" src="candidate.mp4"></video><figcaption>0.3 · Track-contact dynamics</figcaption></figure>
+</div>
+<h2>Track contact from six views</h2>
+<label for="stage">View </label><select id="stage"><option value="brake">Near track at the stop</option><option value="opposite">Opposite track at the stop</option><option value="approach">Uphill approach</option><option value="slew">Overhead during slew</option><option value="descent">Downhill transition</option><option value="reverse">Return to the marker</option></select>
+<div class="pair"><figure><a id="beforeLink" href="baseline-brake.webp"><img id="before" src="baseline-brake.webp" alt="Previous chassis stopped on the slope" width="1440" height="864"></a><figcaption>0.2</figcaption></figure><figure><a id="afterLink" href="candidate-brake.webp"><img id="after" src="candidate-brake.webp" alt="Revised chassis stopped on the slope" width="1440" height="864"></a><figcaption>0.3</figcaption></figure></div>
+<h2>Where the weight goes</h2>
+<figure class="force"><a href="contact.webp"><img src="contact.webp" alt="Track normal forces and the excavator centre of mass after the return" loading="lazy" width="1440" height="864"></a><figcaption>The gold plumb line starts at the combined centre of mass. The two track colours show normal force at each loaded shoe. Open CPU lab and select Track forces to inspect your own drive.</figcaption></figure>
+<p><a href="https://github.com/TrentSterling/sand/blob/main/GAUNTLET.md#driving-on-the-stockpile">Blind verdicts and measurements</a></p>
+</main><script>
+const films=[document.querySelector('#old'),document.querySelector('#current')];
+async function playFrom(offsets){await Promise.all(films.map(async(v,i)=>{v.pause();v.currentTime=offsets[i];await v.play();}));}
+document.querySelector('#start').onclick=()=>playFrom([0,0]);
+document.querySelector('#brake').onclick=()=>playFrom([3.8, 8.9]);
+document.querySelector('#pause').onclick=()=>films.forEach(v=>v.pause());
+const stage=document.querySelector('#stage');
+stage.onchange=()=>{for(const [id,build] of [['before','baseline'],['after','candidate']]){
+ const url=build+'-'+stage.value+'.webp';const img=document.getElementById(id);
+ img.src=url;img.alt=build+' excavator, '+stage.selectedOptions[0].textContent;document.getElementById(id+'Link').href=url;
+}};
+</script></body></html>

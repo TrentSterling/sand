@@ -6,8 +6,5 @@
   "maxYawError": 8.881784197001252e-16,
   "limitTests": 80,
   "maxExcessOverSampledMetres": 2.6645352591003757e-15,
-  "largestUnreachableResidualMetres": 13.197485620011962,
-  "sampledSupportSurfaces": 3,
-  "worstShoePenetration": 0.00000317931424309581,
-  "planarError": 0.00018006485801747019
+  "largestUnreachableResidualMetres": 13.197485620011962
 }

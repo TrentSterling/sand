@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { carrierClearance, createMachine, machineDimensions } from './machine.js';
 import { armIK, forward, toolAttitude } from './arm.js';
-import { createSupport } from './support.js';
-import { createQuarry, WEIGH_BAY } from './quarry.js';
+import { createCrawler } from './crawler.js';
+import { driveGround, yardClearance } from './drive-ground.js';
+import { createContactView } from './contact-view.js';
+import { createQuarry } from './quarry.js';
 import { createGround, createStream } from './terrain.js';
 import { createTreads, renderedHeight } from './treads.js';
 
@@ -72,9 +74,14 @@ async function start() {
     rig = createMachine(THREE),
     treads = createTreads(THREE, scene);
   scene.add(rig.root);
-  const fitSupport = createSupport();
-  let support,
-    poseError = 0,
+  const chassis = createCrawler();
+  let slewRate = 0;
+  const contactView = createContactView(scene, chassis);
+  let sampleDrive,
+    driveInput = 0,
+    steerInput = 0,
+    chassisMs = 0;
+  let poseError = 0,
     contactStop = false,
     sideView = false,
     dragTarget = null,
@@ -91,57 +98,21 @@ async function start() {
   targetMarker.renderOrder = 5;
   scene.add(targetMarker);
   const ground = (x, z) => core.world_ground(w, x, z);
-  const bearing = (x, z) => core.world_bearing(w, x, z);
-  const shoeGround = (x, z) => renderedHeight(bearing, x, z);
-  const probe = new THREE.Vector3();
-  const bucketOutline = [
-    [-0.86, -0.52],
-    [-0.62, -0.6],
-    [0, -0.86],
-    [0.53, -0.64],
-    [0.64, -0.25],
-    [0.38, 0.05],
-  ];
-  function hardClearance(pose) {
-    const k = forward(pose),
-      cs = Math.cos(k.pitch),
-      sn = Math.sin(k.pitch),
-      c = Math.cos(pose.yaw),
-      s = Math.sin(pose.yaw);
-    let gap = carrierClearance(pose);
-    for (const [u, v] of bucketOutline) {
-      const radius = k.wristX + u * cs + v * sn,
-        elevation = k.wristY - u * sn + v * cs;
-      for (const side of [-0.56, 0, 0.56]) {
-        probe.set(radius * c + side * s, elevation, -radius * s + side * c);
-        probe.applyMatrix4(rig.root.matrixWorld);
-        const { x, y, z } = probe,
-          w = WEIGH_BAY;
-        const wall =
-          z >= w.mouth &&
-          z <= w.back + w.wall &&
-          Math.abs(x) <= w.right + w.wall &&
-          (Math.abs(x) >= w.right || z >= w.back);
-        gap = Math.min(gap, y - (wall ? w.height : 0));
-      }
-    }
-    return gap;
-  }
   function protectTool(old) {
     if (old.boom === p.boom && old.stick === p.stick && old.curl === p.curl && old.yaw === p.yaw)
       return;
     contactStop = false;
-    const margin = hardClearance(p);
-    if (margin >= 0 || margin >= hardClearance(old)) return;
+    const margin = carrierClearance(p);
+    if (margin >= 0 || margin >= carrierClearance(old)) return;
     const goal = { ...p };
     let good = 0,
       bad = 1;
-    const floor = Math.min(0, hardClearance(old));
+    const floor = Math.min(0, carrierClearance(old));
     for (let i = 0; i < 9; i++) {
       const t = (good + bad) / 2;
       for (const joint of ['boom', 'stick', 'curl', 'yaw'])
         p[joint] = mix(old[joint], goal[joint], t);
-      if (hardClearance(p) >= floor) good = t;
+      if (carrierClearance(p) >= floor) good = t;
       else bad = t;
     }
     for (const joint of ['boom', 'stick', 'curl', 'yaw'])
@@ -181,7 +152,9 @@ async function start() {
     availableTorque = 1;
   const keyHeld = new Set(),
     pointerHeld = new Map();
-  const replay = new Float32Array(12 * 3600);
+  const replay = new Float32Array(5 * 3600);
+  const shoeEvents = Array(3600).fill(null);
+  let drove = false;
   let trackMoved = false;
   const source = { x: 5.45, z: -0.15 },
     bay = { x: 0, z: 5.55 },
@@ -287,6 +260,9 @@ async function start() {
     if (w) core.world_drop(w);
     if (sideView) toggleCutView();
     w = core.world_new(0);
+    sampleDrive = driveGround(core, w);
+    shoeEvents.fill(null);
+    drove = false;
     base = { x: 0, y: 0, z: 0 };
     trackYaw = 0;
     travel = 0;
@@ -303,6 +279,9 @@ async function start() {
     availableTorque = 1;
     treads.reset();
     p = { ...armIK(5.82, 2.65, -0.74), yaw: 0 };
+    chassis.reset(p, 0);
+    slewRate = 0;
+    driveInput = steerInput = 0;
     setManual(false);
     setPause(false);
     byId('nextJob').hidden = true;
@@ -504,31 +483,35 @@ async function start() {
         p[joint] += clamp(want[joint] - p[joint], -rate * availableTorque, rate * availableTorque);
       }
     } else {
-      p.boom = clamp(p.boom + axis('boomUp', 'boomDown') * 0.012, ...machineDimensions.limits.boom);
+      p.boom = clamp(
+        p.boom + axis('boomUp', 'boomDown') * 0.012 * availableTorque,
+        ...machineDimensions.limits.boom,
+      );
       p.stick = clamp(
         p.stick + axis('stickOut', 'stickIn') * 0.017 * availableTorque,
         ...machineDimensions.limits.stick,
       );
       p.curl = clamp(p.curl + curlInput, ...machineDimensions.limits.curl);
     }
-    p.yaw += axis('left', 'right') * 0.018;
-    const turn = axis('steerLeft', 'steerRight') * 0.012;
-    trackYaw += turn;
-    const advance = axis('driveForward', 'driveBack') * 0.031;
-    const x = clamp(base.x + advance * Math.cos(trackYaw), -12.5, 12.5),
-      z = clamp(base.z - advance * Math.sin(trackYaw), -12.5, 12.5);
-    if (!(Math.abs(x) < 3.2 && z > 2.63 && z < 8.8)) {
-      trackMoved = x !== base.x || z !== base.z;
-      base.x = x;
-      base.z = z;
-      travel += advance;
-    }
-    trackMoved ||= turn !== 0;
+    const wantedSlew = axis('left', 'right') * 0.96;
+    slewRate += clamp(wantedSlew - slewRate, -1.12 * step, 1.12 * step);
+    p.yaw += slewRate * step;
+    driveInput = axis('driveForward', 'driveBack');
+    steerInput = axis('steerLeft', 'steerRight');
   }
   function updateMachine() {
-    support = fitSupport(base.x, base.z, trackYaw, shoeGround);
-    const { rise, roll } = support;
-    base.y = support.y;
+    const { x, y, z } = chassis.position;
+    trackMoved =
+      Math.hypot(x - base.x, z - base.z) > 1e-7 ||
+      Math.abs(angleDelta(trackYaw, chassis.angles.y)) > 1e-7;
+    base.x = x;
+    base.y = y;
+    base.z = z;
+    trackYaw = chassis.angles.y;
+    const { z: rise, x: roll } = chassis.angles;
+    const [left, right] = chassis.odometer;
+    travel = (left + right) / 2;
+    const beltTurn = (right - left) / 2.18;
     const load = core.world_load(w) / capacity;
     const key = [
       p.boom,
@@ -537,6 +520,7 @@ async function start() {
       p.yaw,
       load,
       travel,
+      beltTurn,
       trackYaw,
       base.x,
       base.y,
@@ -553,10 +537,16 @@ async function start() {
       controls.target.z += dz;
       camera.position.x += dx;
       camera.position.z += dz;
+      const dy = base.y - rig.root.position.y;
+      controls.target.y += dy;
+      camera.position.y += dy;
     }
     rig.root.position.set(base.x, base.y, base.z);
-    rig.root.rotation.set(roll, trackYaw, rise, 'YXZ');
-    rig.pose({ ...p, load, travel, turn: trackYaw });
+    rig.root.rotation.order = 'YXZ';
+    rig.root.quaternion.copy(chassis.rotation);
+    rig.root.updateMatrix();
+    terrain.trackPose(rig.root.matrix);
+    rig.pose({ ...p, load, travel, turn: beltTurn });
     renderer.shadowMap.needsUpdate = true;
     rig.tip.getWorldPosition(tip);
   }
@@ -565,56 +555,67 @@ async function start() {
     const previousPose = { ...p };
     trackMoved = false;
     if (sequence.length) animateArm();
+    driveInput = steerInput = 0;
     if (manual) moveManual();
+    else slewRate = 0;
     protectTool(previousPose);
     if (dragTarget) {
       const achieved = forward(p);
       poseError = Math.hypot(achieved.r - dragTarget.r, achieved.h - dragTarget.h);
       targetMarker.material.color.setHex(poseError > 0.15 || contactStop ? 0xf07b46 : 0xb4e47c);
     }
+    const bodyStart = performance.now();
+    chassis.step(p, core.world_load(w) / units, driveInput, steerInput, sampleDrive, yardClearance);
+    drove ||= !!(driveInput || steerInput);
+    chassisMs += performance.now() - bodyStart;
     updateMachine();
     const { pitch, yaw } = toolAttitude(rig.bucket.matrixWorld.elements);
     const now = performance.now();
-    const shoeFore = Math.tan(support.rise) / Math.cos(support.roll),
-      shoeLateral = -Math.tan(support.roll);
-    if (trackMoved)
-      core.world_track_contact(w, base.x, base.z, trackYaw, base.y, shoeFore, shoeLateral);
+    if (frame % 4 === 0 && !chassis.asleep) {
+      let events = null;
+      for (const pad of chassis.patches) {
+        if (pad.soil < 0.005 || pad.normalLoad < 0.56) continue;
+        const kpa = pad.normalLoad / (0.405 * 0.34);
+        core.world_press_shoe(w, pad.world.x, pad.world.z, trackYaw, kpa, pad.slip, pad.side);
+        if (frame < 3600) {
+          events ??= [];
+          events.push(pad.world.x, pad.world.z, trackYaw, kpa, pad.slip, pad.side);
+        }
+      }
+      if (events) shoeEvents[frame] = new Float32Array(events);
+    }
     core.world_tool(w, tip.x, tip.y, tip.z, yaw, pitch);
     core.world_tick(w);
     simMs += performance.now() - now;
     renderTicks++;
     const penetration = Math.max(0, core.world_ground(w, tip.x, tip.z) - tip.y);
     availableTorque =
-      1 / (1 + 0.48 * Math.min(1.2, penetration) + (0.17 * core.world_load(w)) / capacity);
+      1 /
+      (1 +
+        0.48 * Math.min(1.2, penetration) +
+        (0.17 * core.world_load(w)) / capacity +
+        Math.min(2, chassis.bucketForce / 105));
     visits = core.world_visited(w) * 2;
     clock += step;
     maxLoad = Math.max(maxLoad, core.world_load(w));
     if (frame < 3600) {
-      const j = frame * 12;
+      const j = frame * 5;
       replay[j] = tip.x;
       replay[j + 1] = tip.y;
       replay[j + 2] = tip.z;
       replay[j + 3] = yaw;
       replay[j + 4] = pitch;
-      replay[j + 5] = Number(trackMoved);
-      replay[j + 6] = base.x;
-      replay[j + 7] = base.z;
-      replay[j + 8] = trackYaw;
-      replay[j + 9] = base.y;
-      replay[j + 10] = shoeFore;
-      replay[j + 11] = shoeLateral;
       if (action || manual) savedMotion++;
     }
     frame++;
     if (trackMoved || frame === 1)
       treads.update(base.x, base.z, trackYaw, ground, (x, z) => {
-        const f = (x - base.x) * Math.cos(trackYaw) - (z - base.z) * Math.sin(trackYaw);
-        const l = (x - base.x) * Math.sin(trackYaw) + (z - base.z) * Math.cos(trackYaw);
-        const floor =
-          base.y +
-          (f * Math.tan(support.rise)) / Math.cos(support.roll) -
-          l * Math.tan(support.roll);
-        return floor - renderedHeight(ground, x, z) < 0.085;
+        return chassis.patches.some(
+          (pad) =>
+            pad.normalLoad > 0.75 &&
+            pad.n.axis.y > 0.2 &&
+            (pad.world.x - x) ** 2 + (pad.world.z - z) ** 2 < 0.52 ** 2,
+        );
       });
     const moving =
       Math.abs(prev.pitch - pitch) +
@@ -643,6 +644,12 @@ async function start() {
       byId('massError').textContent = core.world_balance(w) + ' units';
       byId('upload').textContent = (uploadBytes / 1024).toFixed(1) + ' KiB';
       byId('meshTime').textContent = terrainMs.toFixed(2) + ' ms';
+      const body = chassis.state();
+      byId('trackLoad').textContent =
+        body.leftLoadKN.toFixed(0) + ' / ' + body.rightLoadKN.toFixed(0) + ' kN';
+      byId('chassisTime').textContent = (chassisMs / Math.max(1, renderTicks)).toFixed(3) + ' ms';
+      byId('travelSpeed').textContent = (body.speed * 3.6).toFixed(1) + ' km/h';
+      byId('machineMass').textContent = (body.massKg / 1000).toFixed(2) + ' t';
       byId('draws').textContent = String(renderer.info.render.calls);
     }
     byId('fps').textContent = Math.round(fps) + ' fps';
@@ -669,7 +676,7 @@ async function start() {
         make = avalanche ? core.avalanche_new : core.world_new;
       sparse = make(0);
       dense = make(1);
-      const actual = scenario === 'player' && savedMotion > 30 && maxLoad > 100;
+      const actual = scenario === 'player' && savedMotion > 30 && (maxLoad > 100 || drove);
       const frames = actual ? Math.min(frame, 3600) : avalanche ? 360 : 720;
       const times = [0, 0],
         pairs = [0, 0],
@@ -683,17 +690,20 @@ async function start() {
           const begin = performance.now();
           for (let f = i; f < end; f++) {
             if (actual) {
-              const j = f * 12;
-              if (replay[j + 5])
-                core.world_track_contact(
-                  handle,
-                  replay[j + 6],
-                  replay[j + 7],
-                  replay[j + 8],
-                  replay[j + 9],
-                  replay[j + 10],
-                  replay[j + 11],
-                );
+              const j = f * 5;
+              const events = shoeEvents[f];
+              if (events)
+                for (let n = 0; n < events.length; n += 6) {
+                  core.world_press_shoe(
+                    handle,
+                    events[n],
+                    events[n + 1],
+                    events[n + 2],
+                    events[n + 3],
+                    events[n + 4],
+                    events[n + 5],
+                  );
+                }
               core.world_tool(
                 handle,
                 replay[j],
@@ -718,6 +728,8 @@ async function start() {
         await new Promise(requestAnimationFrame);
       }
       const equal = core.world_hash(sparse) === core.world_hash(dense);
+      const liveMatch =
+        actual && frame <= 3600 ? core.world_hash(sparse) === core.world_hash(w) : null;
       const result = {
         source: actual ? 'Your dig' : avalanche ? 'Quarry-wide avalanche' : 'Reference dig',
         ticks: frames,
@@ -725,6 +737,7 @@ async function start() {
         denseMs: times[1],
         pairs,
         match: equal,
+        liveMatch,
         massError: maxDelta,
       };
       window.sandLab.lastBenchmark = result;
@@ -799,6 +812,8 @@ async function start() {
   });
   byId('helpToggle').onclick = () => togglePanels('help');
   byId('labToggle').onclick = () => togglePanels('lab');
+  byId('forces').onclick = () =>
+    byId('forces').setAttribute('aria-pressed', String(contactView.toggle()));
   byId('tiles').onclick = () => {
     const on = byId('tiles').getAttribute('aria-pressed') !== 'true';
     byId('tiles').setAttribute('aria-pressed', String(on));
@@ -977,6 +992,7 @@ async function start() {
       hardContact: contactStop,
       cutView: sideView,
       base: { ...base },
+      chassis: chassis.state(),
       trackYaw,
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
@@ -1014,6 +1030,7 @@ async function start() {
     }
     if (sideView) frameCutView();
     else controls.update();
+    contactView.update(ground);
     renderer.render(scene, camera);
     frameSum += wallTime;
     frameCount++;
@@ -1022,7 +1039,7 @@ async function start() {
       fps = frameCount / frameSum;
       hud();
       sinceHud = 0;
-      simMs = 0;
+      simMs = chassisMs = 0;
       renderTicks = 0;
       frameSum = 0;
       frameCount = 0;

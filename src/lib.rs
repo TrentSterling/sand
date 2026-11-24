@@ -200,6 +200,54 @@ impl World {
             if i + N >= CELLS { i } else { i + N },
         ]
     }
+    // A 405 x 340 mm strip under a real loaded shoe. Pressure packs loose
+    // soil. Peak loads and track slip push a shallow rut towards the cheek.
+    fn press_shoe(&mut self, x: f32, z: f32, yaw: f32, pressure: f32, slip: f32, side: f32) {
+        if pressure < 4.0 {
+            return;
+        }
+        let (s, c) = yaw.sin_cos();
+        let target_pack = (pressure * 2.25).clamp(0., 255.) as u8;
+        for iz in cell(z - 0.29).max(0)..=cell(z + 0.29).min(N as i32 - 1) {
+            for ix in cell(x - 0.29).max(0)..=cell(x + 0.29).min(N as i32 - 1) {
+                let px = coord(ix as usize);
+                let pz = coord(iz as usize);
+                if ((px - x) * c - (pz - z) * s).abs() > 0.203
+                    || ((px - x) * s + (pz - z) * c).abs() > 0.17
+                {
+                    continue;
+                }
+                let i = iz as usize * N + ix as usize;
+                let packed = self.compact[i];
+                if self.height[i] < 1 || self.base[i] != 0 {
+                    continue;
+                }
+                if packed < target_pack {
+                    self.compact[i] = packed.saturating_add(((target_pack - packed) / 5).max(1));
+                    self.wake(i);
+                }
+                let excess =
+                    (pressure - 73.).max(0.) * 0.066 + slip.min(2.) * pressure.min(150.) * 0.056;
+                let squeeze = (pressure - 160.).max(0.) * 0.034;
+                let shift = ((1. - packed as f32 / 255.) * excess + squeeze).min(18.) as i32;
+                if shift == 0 {
+                    continue;
+                }
+                let a = cell(px + s * side * 0.49);
+                let b = cell(pz + c * side * 0.49);
+                if !inside(a) || !inside(b) {
+                    continue;
+                }
+                let dest = b as usize * N + a as usize;
+                if self.base[dest] != 0 || self.in_bay[i] != self.in_bay[dest] {
+                    continue;
+                }
+                let amount = shift.min(self.height[i]);
+                self.change(i, -amount);
+                self.change(dest, amount);
+            }
+        }
+    }
     fn local_random(&mut self) -> f32 {
         self.random ^= self.random << 13;
         self.random ^= self.random >> 17;
@@ -601,6 +649,18 @@ pub extern "C" fn world_ground(w: &World, x: f32, z: f32) -> f32 {
     w.surface(x, z)
 }
 #[no_mangle]
+pub extern "C" fn world_press_shoe(
+    w: &mut World,
+    x: f32,
+    z: f32,
+    yaw: f32,
+    kpa: f32,
+    slip: f32,
+    side: f32,
+) {
+    w.press_shoe(x, z, yaw, kpa, slip, side)
+}
+#[no_mangle]
 pub extern "C" fn world_bearing(w: &World, x: f32, z: f32) -> f32 {
     let (cx, cz) = (cell(x), cell(z));
     if !inside(cx) || !inside(cz) {
@@ -733,6 +793,31 @@ pub extern "C" fn replay_step(w: &mut World, frame: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shoe_pressure_compacts_and_slip_berms_conserve_material() {
+        let mut tiled = World::new(false);
+        let mut dense = World::new(true);
+        let initial = tiled.height.clone();
+        let index = cell(0.) as usize * N + cell(5.) as usize;
+        tiled.press_shoe(5., 0., 0., 3., 1., 1.);
+        assert_eq!(tiled.height, initial);
+        assert_eq!(tiled.compact[index], 0);
+        for world in [&mut tiled, &mut dense] {
+            world.press_shoe(5., 0., 0., 50., 0., 1.);
+            assert!(world.compact[index] > 0);
+            assert_eq!(world.height, initial);
+            world.press_shoe(5., 0., 0., 120., 0.9, 1.);
+            assert!(world.height[index] < initial[index]);
+            let outside = cell(0.49) as usize * N + cell(5.) as usize;
+            assert!(world.height[outside] > initial[outside]);
+            for _ in 0..40 {
+                world.tick();
+            }
+            assert_eq!(world.balance(), 0);
+        }
+        assert_eq!(tiled.height, dense.height);
+        assert_eq!(tiled.compact, dense.compact);
+    }
     #[test]
     fn full_bucket_drag_leaves_a_low_berm_and_relaxes_when_held() {
         let mut sparse = World::new(false);

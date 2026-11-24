@@ -155,7 +155,9 @@ def record(side):
         state = call('reset')
         key('ArrowUp', True)
         try:
-            state = call('advance', 115)
+            for _ in range(96):
+                state=call('advance',5)
+                if state['base']['x']>=3.5: break
         finally:
             key('ArrowUp', False)
         assert state['manual'] and state['base']['x'] > 3, state

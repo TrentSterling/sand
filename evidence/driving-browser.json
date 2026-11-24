@@ -1,0 +1,25 @@
+{
+  "url": "index.html (local release)",
+  "releaseIndexSha256": "ccf292927ead9fc6a026d8246d6d3b76db9c7c4368f133132ae4d8850f1c6932",
+  "browser": "firefox",
+  "version": "148.0.2",
+  "parkedDeltaX": 0.12667600463147544,
+  "descendingX": 7.1135804246034,
+  "returnedX": 5.515606450837738,
+  "massError": 0,
+  "supportPatches": 12,
+  "replay": {
+    "source": "Your dig",
+    "ticks": 1221,
+    "sparseMs": 14,
+    "denseMs": 636,
+    "pairs": [
+      651648,
+      39853568
+    ],
+    "match": true,
+    "liveMatch": true,
+    "massError": 0
+  },
+  "errors": []
+}

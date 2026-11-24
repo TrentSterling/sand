@@ -12,6 +12,10 @@ export function createGround(scene) {
   // deposited loose material follow the actual cut in any direction.
   const bankDatum = new THREE.BufferAttribute(new Float32Array(N * N), 1);
   geometry.setAttribute('bankDatum', bankDatum);
+  const packed = new THREE.BufferAttribute(new Uint8Array(N * N), 1, true);
+  packed.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('packedSoil', packed);
+  const trackFrame = {value: new THREE.Matrix4()};
   let seededDatum = false;
   const pos = geometry.attributes.position,
     normal = geometry.attributes.normal;
@@ -26,14 +30,15 @@ export function createGround(scene) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.activeMap = { value: activeMap };
     shader.uniforms.inspect = inspect;
+    shader.uniforms.trackFrame = trackFrame;
     shader.vertexShader =
-      'attribute float bankDatum; varying float bankChange; varying vec3 quarryPoint;\n' +
+      'attribute float bankDatum; attribute float packedSoil; varying float density; varying float bankChange; varying vec3 quarryPoint;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nquarryPoint = position; bankChange=position.y-bankDatum;',
+        '#include <begin_vertex>\ndensity=packedSoil; quarryPoint = position; bankChange=position.y-bankDatum;',
       );
     shader.fragmentShader =
-      `varying vec3 quarryPoint; varying float bankChange; uniform sampler2D activeMap; uniform float inspect;
+      `varying vec3 quarryPoint; varying float bankChange; varying float density; uniform mat4 trackFrame; uniform sampler2D activeMap; uniform float inspect;
       float sandHash(vec2 p){ vec3 a=fract(vec3(p.xyx)*.1031); a+=dot(a,a.yzx+33.33); return fract((a.x+a.y)*a.z); }
       float sandNoise(vec2 p){vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
         return mix(mix(sandHash(i),sandHash(i+vec2(1.,0.)),f.x),mix(sandHash(i+vec2(0.,1.)),sandHash(i+1.),f.x),f.y);}
@@ -55,6 +60,19 @@ export function createGround(scene) {
       float grit=(sandNoise(ground*72.)-.5)*(1.-smoothstep(.007,.035,pixel));
       float ripples=sin(ground.x*18.+ground.y*5.+strata*9.)*dirt*.016*(1.-smoothstep(.025,.1,pixel));
       diffuseColor.rgb=mix(gravel,sand,dirt)*(1.+.13*grit+ripples);
+      // Packed sand breaks the light differently on the actual pressure paths.
+      float burnish=smoothstep(.035,.68,density);
+      diffuseColor.rgb *= mix(vec3(1.),vec3(.65,.60,.53),burnish*dirt);
+      // Near-field contact shade follows the two curved track soles. An
+      // overhanging shoe progressively loses this short-range occlusion.
+      vec3 under=(trackFrame*vec4(quarryPoint,1.)).xyz;
+      float end=max(abs(under.x)-1.62,0.);
+      float across=max(abs(abs(under.z)-1.09)-.34,0.);
+      float sole=.45-sqrt(max(0.,.45*.45-end*end));
+      float gap=max(0.,sole-under.y);
+      float occ=(1.-smoothstep(.02,.42,across))*(1.-smoothstep(.035,.46,gap))
+               *(1.-smoothstep(.38,.68,end));
+      diffuseColor.rgb *= 1.-.55*occ;
       if(inspect>.5 && max(abs(ground.x),abs(ground.y))<16.){vec2 tiles=(ground+16.)*.5;vec2 edge=min(fract(tiles),1.-fract(tiles));
         float busy=texture2D(activeMap,(floor(tiles)+.5)/16.).r;
         diffuseColor.rgb=mix(diffuseColor.rgb,mix(vec3(.045,.18,.18),vec3(.97,.34,.028),busy),.55);
@@ -79,6 +97,7 @@ export function createGround(scene) {
   }
   const apronGeom = new THREE.BufferGeometry(),
     indices = [];
+  apronGeom.setAttribute('packedSoil',new THREE.BufferAttribute(new Uint8Array(8),1,true));
   apronGeom.setAttribute('bankDatum', new THREE.BufferAttribute(new Float32Array(8), 1));
   for (let i = 0; i < 4; i++) {
     const j = (i + 1) % 4;
@@ -137,6 +156,7 @@ export function createGround(scene) {
         const nz =
           (depth(Math.max(0, z - 1) * N + x) - depth(Math.min(N - 1, z + 1) * N + x)) * 0.004;
         const inv = 1 / Math.hypot(nx, 1, nz);
+        packed.array[i]=compact[i];
         pos.setY(i, depth(i) * 0.001);
         normal.setXYZ(i, nx * inv, inv, nz * inv);
       }
@@ -144,16 +164,18 @@ export function createGround(scene) {
         count = (hi[z] - lo[z] + 1) * 3;
       pos.addUpdateRange(start, count);
       normal.addUpdateRange(start, count);
-      bytes += count * 8;
+      packed.addUpdateRange(start/3,count/3);
+      bytes += count * 8 + count/3;
     }
     if (bytes) {
-      pos.needsUpdate = normal.needsUpdate = true;
+      pos.needsUpdate = normal.needsUpdate = packed.needsUpdate = true;
       core.world_clear_dirty(world);
     }
     return bytes;
   }
   return {
     sync,
+    trackPose: (matrix) => trackFrame.value.copy(matrix).invert(),
     inspect: (on) => {
       inspect.value = Number(on);
     },

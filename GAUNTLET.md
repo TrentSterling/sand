@@ -4,7 +4,23 @@ The first model passed its pin-closure test while the bucket faced the wrong way
 
 **[Watch the synchronized comparison and inspect all 25 matched views](https://tront.xyz/sand/review/)** · [Play the revised machine](https://tront.xyz/sand/)
 
-## Blind results
+## Driving on the stockpile
+
+The 0.2 chassis advanced a fixed distance per input tick and fitted its pose to the terrain. On a sharp crest, an unsupported end could hang there for as long as the operator held the brake. For the 0.3 comparison both machines approach the same bank with a raised empty boom, brake at x = 5.18 m, swing the house, descend, reverse and stop back at x = 5.65 m. The two films keep their original rates. The gallery's brake button aligns the moment each machine releases its drive input. [Watch both drives and inspect six paired views](https://tront.xyz/sand/review/drive/)
+
+| Anonymous review | Judgment before identities were revealed |
+| --- | --- |
+| First physics pass | The reviewer chose 0.2, 7/10, over the first dynamic chassis, 2/10. The prototype went nose-over after the raised-arm crest maneuver. |
+| Second pass | The reviewer preferred the dynamic chassis, 6.5/10 versus 4/10, and held both. The new machine parked convincingly. Its descent looked abrupt and the uphill reverse was easy to miss. |
+| Released pass | A fresh reviewer chose B, the dynamic chassis, for public prototype release and held A, the 0.2 chassis. They saw the uphill attitude persist through the slew from both sides. At 15.2 to 16.1 seconds the crest still reads as a hard fulcrum with too little visible yielding. |
+
+Each judgment was based on anonymous footage and multiple angles. The final pass adds granular rolling resistance at the loaded shoes, speed-dependent damping of track rocking, visible pressure-packed soil and near-field tread shading. The final films show the full return to a common marker. [Driving footage](https://tront.xyz/sand/review/drive/) · [Contact view](review/drive/contact.webp)
+
+The release machine brakes from 1.52 m/s in 0.42 m on flat bedrock. On the fixed crest maneuver its maximum longitudinal travel from the brake point through the slew was 0.14 m. With the loaded arm extended downhill on a 10.2° tilt table, the two tracks carried about 187 and 13 kN. The separate ledge test loses support and drops to the lower level. The free-fall test records zero drive force and zero horizontal travel. These are game measurements. The geometry and masses target a 20-tonne class machine, and the joint motion remains prescribed. [Drive receipt](evidence/drive.json) · [Volvo EC220 product guide](https://www.volvoce.com/-/media/aprimo/pdf/crawler-excavators/ec220/product-guide-ec220-d5-t3-en-30-20064400-d.pdf) · [Sequential impulses, Erin Catto](https://box2d.org/files/ErinCatto_SequentialImpulses_GDC2006.pdf)
+
+To reproduce the driving comparison, set `SAND_GAUNTLET_DIR` to a fresh private work directory. Build the game, run `node tools/gauntlet-build.mjs baseline f6a7c1a`, then `node tools/gauntlet-build.mjs candidate` and `python tools/drive-capture.py`. The script writes anonymous copies under `drive-blind/` and the label key under `private/`. Run `node tools/verify-drive.mjs` for the deterministic measurements and `python tools/drive-playtest.py` for physical-key input on the shipped page.
+
+## Arm and excavation blind results (0.2)
 
 Two independent AI reviewers each received two anonymous sets of game captures. Each committed to a winner, scores and a ship-or-hold judgment before the build identities were revealed. Neither had source code, prior reviews or performance figures. These are two individual judgments about the footage.
 
@@ -43,7 +59,7 @@ The geometry is authored directly in Three.js. The boom, fork, stick, bucket she
 ## How to inspect the evidence
 
 - **Look along the pins.** Views 04, 06 and 08 show tooth direction, retained volume and the cylinder eyes. Across 1,485 forward poses the largest gap between the reference point and the modeled cutting face is below 0.000001 m. Seven specified pairs of steel parts retain at least 4 mm clearance in their sampled sweeps. [Cab side](https://tront.xyz/sand/review/#04) · [Load close-up](https://tront.xyz/sand/review/#06) · [Hydraulics](https://tront.xyz/sand/review/#08)
-- **Watch the contact move.** T02 through T05 show approach, inward draw and breakout. Views 13 and 15 show the two sides on the bank. A rigid crawler can bridge an uneven surface. The terrain-support checks cover a plane, crest and one-sided step. [Working bank](https://tront.xyz/sand/review/#T03) · [Opposite crawler](https://tront.xyz/sand/review/#15) · [IK and support receipt](evidence/controls.json)
+- **Watch the contact move.** T02 through T05 show approach, inward draw and breakout. Views 13 and 15 show the two sides on the bank. A rigid crawler can bridge an uneven surface. The terrain-support checks cover a plane, crest and one-sided step. [Working bank](https://tront.xyz/sand/review/#T03) · [Opposite crawler](https://tront.xyz/sand/review/#15) · [0.2 IK and support receipt](https://github.com/TrentSterling/sand/blob/f6a7c1a/evidence/controls.json)
 - **Follow the main discharge.** The close-up shows onset, and the wide angle shows the landing. A few grains can arrive during swing braking. The published impact plate requires at least another 0.025 m³ to hit the bay after the opening close-up, with material still airborne. [Lip close-up](https://tront.xyz/sand/review/#11) · [Impact](https://tront.xyz/sand/review/#14)
 - **Drive it yourself.** Cut view accepts a mouse or touch drag in the vertical working plane. Automated runs also completed the two orders in two and three cycles, then repeated both in the downloaded build with HTTP requests blocked. [Play](https://tront.xyz/sand/) · [Browser receipt](evidence/browser.json)
 

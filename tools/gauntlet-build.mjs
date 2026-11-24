@@ -100,6 +100,7 @@ function installReviewBridge() {
         }
       }
     }
+    if(typeof contactView!=='undefined')contactView.update(ground);
     renderer.shadowMap.needsUpdate = true;
     renderer.render(scene, lens);
     if (motion) motionContext.drawImage(canvas, 0, 0, motionFrame.width, motionFrame.height);

@@ -4,7 +4,7 @@ Drive a tracked excavator in a small working quarry. Curl the bucket into the ba
 
 **[Play SandLab on GitHub Pages](https://tront.xyz/sand/)** · [Download the standalone HTML](https://github.com/TrentSterling/sand/raw/refs/heads/main/index.html)
 
-[Compare the original and revised excavator from 15 angles](https://tront.xyz/sand/review/) · [Read the blind reviews and mechanical results](GAUNTLET.md)
+[Watch the driving crest test](https://tront.xyz/sand/review/drive/) · [Compare the original and revised excavator from 15 angles](https://tront.xyz/sand/review/) · [Read the blind reviews and mechanical results](GAUNTLET.md)
 
 ![SandLab excavator at the working face of the quarry](evidence/quarry.png)
 
@@ -18,10 +18,16 @@ Drive a tracked excavator in a small working quarry. Curl the bucket into the ba
 | **Double-click terrain** | Position the cutting edge at a reachable point using two-link inverse kinematics. |
 | **Cut view** | Look across the pin axes and drag the teeth through the bank with a mouse or finger. Hold R or F to adjust the bucket pitch while dragging. The cursor changes colour when the teeth fall short. |
 | **Drag / scroll or pinch** | Orbit and zoom. The manual panel also has hold controls for touch. |
-| **CPU lab** | Pause, single-step, show awake terrain tiles, or replay the same inputs through two CPU schedulers. |
+| **CPU lab** | Pause, single-step, show track forces and centre of mass, show awake terrain tiles, or replay the same inputs through two CPU schedulers. |
 | **Help** | Toggle engine sound, reset the quarry, or save the one-file offline build. |
 
 The first order weighs 0.75 m³ of delivered sand. The second calls for 1.50 m³ inside the stockpile ring. Both count material that actually reaches the destination. Volumes are reported as their loose-sand equivalents so compacting a pile under the tracks cannot change the score.
+
+## Driving the crawler
+
+Raise the boom with **W**, drive up the bank with **↑**, release to brake, then slew with **Q**. The 20.4 t carrier carries its velocity into the stop. The house, counterweight, boom, stick, bucket and payload determine how the two tracks share its weight. A heaped bucket adds 880 kg at the attachment. The raised arm can rock the chassis, and pressing the bucket into hard ground can lift weight off the tracks.
+
+Each track drives and brakes independently. Loaded shoes compress loose sand and can push material sideways into ruts. The CPU integrates the chassis at 120 Hz and the soil at 60 Hz. The machine uses a rigid undercarriage, a prescribed hydraulic linkage and a dry granular heightfield. The masses, drive characteristics and soil coefficients are game calibrations. [Physics source](web/crawler.js) · [Crest films and six matched views](https://tront.xyz/sand/review/drive/) · [Drive test measurements](evidence/drive.json)
 
 ## What moves the sand
 
@@ -40,7 +46,7 @@ On an Intel Core Ultra 9 285K under Windows, 21 paired repetitions of the 720-ti
 | Active tiles | 0.742 ms | 0.762 ms | 217,088 |
 | Full grid | 32.473 ms | 33.727 ms | 23,500,800 |
 
-Both runs ended with material hash `92c38cf6` and zero mass error. In Chrome at 1440 × 900 on an RTX 5070 Ti, the playtest measured 16.7 ms median and 16.8 ms p95 between animation frames. The browser's quarry-wide avalanche took 20.3 ms with active tiles and 38.2 ms with a full scan over the complete 360-tick replay. The final material states matched. [Browser playtest and timing receipt](evidence/browser.json)
+Both runs ended with material hash `92c38cf6` and zero mass error. In Chrome at 1440 × 900 on an RTX 5070 Ti, the playtest measured 16.7 ms median and 16.8 ms p95 between animation frames. The browser's quarry-wide avalanche took 20.3 ms with active tiles and 37.8 ms with a full scan over the complete 360-tick replay. The final material states matched. [Browser playtest and timing receipt](evidence/browser.json)
 
 ## The excavator
 
@@ -48,7 +54,7 @@ The machine is an original parametric model. Its house, boom, stick, toothed buc
 
 The boom and dipper are extruded steel profiles. The bucket shell, side plates, tooth faces, fork and cylinder eyes have editable cross-sections and local pin coordinates. The authoring inputs are hand-set Three.js geometry and dimensions. AnyMachine informed the part decomposition. The img2threejs workflow informed the fixed-view visual checks. Production machines provided proportion and working-motion references. The exact linkage dimensions and cylinder stops are original to this game. [AnyMachine](https://github.com/apekshik/anymachine) · [img2threejs](https://github.com/img2threejs/img2threejs) · [Caterpillar digging and trenching reference](https://www.cat.com/en_US/articles/for-owners/tips-for-digging-and-trenching-with-your-excavator.html)
 
-Validation covers 1,485 forward poses, 2,288 reachable tooth targets through the game's actual IK, 80 constrained target cases, 2,048 stroke intervals per actuator joint, and 21 isolated model renders. The crawler seats on 18 terrain samples. Load transfer, hydraulic pressure and traction dynamics remain approximations. [Rig checks](evidence/rig.json) · [IK and support checks](evidence/controls.json) · [Draw-order audit](evidence/surface-audit.json)
+Validation covers 1,485 forward poses, 2,288 reachable tooth targets through the game's actual IK, 80 constrained target cases, 2,048 stroke intervals per actuator joint, and 21 isolated model renders. The driving gauntlet separately exercises free fall, braking, a ledge drop, bank traversal, cross-slope load transfer, bucket jacking and a parked crest reversal. [Rig checks](evidence/rig.json) · [IK checks](evidence/controls.json) · [Draw-order audit](evidence/surface-audit.json)
 
 ## Run and build
 
@@ -69,6 +75,7 @@ cargo test --locked --release
 cargo run --locked --release --bin bench
 node tools/verify-machine.mjs
 node tools/verify-controls.mjs
+node tools/verify-drive.mjs
 ```
 
-For browser verification, install Python Playwright and Chrome. Run `python tools/playtest.py` to complete both jobs, compare the solvers and open the downloaded build with network requests blocked. Run `python -m playwright install chromium` and `python tools/inspect-machine.py` for the orthographic model review.
+For browser verification, install Python Playwright and Chrome. Run `python tools/playtest.py` to complete both jobs, compare the solvers and open the downloaded build with network requests blocked. Run `python tools/drive-playtest.py` for the keyboard crest run and driving gallery. Run `python -m playwright install chromium` and `python tools/inspect-machine.py` for the orthographic model review.
