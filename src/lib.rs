@@ -6,6 +6,9 @@ const T: usize = N / TILE;
 const CELLS: usize = N * N;
 // The modeled bucket holds 0.44 m³ struck and 0.55 m³ with a heaped load.
 pub const CAPACITY: i32 = 35_200;
+const CUP_LEVEL: f32 = 0.52;
+const CUP_OFFSET: f32 = 0.05;
+const CUP_RANGE: f32 = 0.50;
 const DT: f32 = 1.0 / 60.0;
 const SETTLE: i32 = 80;
 const REST: i32 = 92;
@@ -229,7 +232,11 @@ impl World {
                 let excess =
                     (pressure - 73.).max(0.) * 0.066 + slip.min(2.) * pressure.min(150.) * 0.056;
                 let squeeze = (pressure - 160.).max(0.) * 0.034;
-                let shift = ((1. - packed as f32 / 255.) * excess + squeeze).min(18.) as i32;
+                // Confined sand hardens as its voids close. A parked, fully
+                // packed shoe cannot keep pumping the column out to bedrock.
+                let loose = 1. - packed as f32 / 255.;
+                let shift =
+                    (loose * (excess + squeeze) + slip.min(1.) * squeeze * 0.18).min(18.) as i32;
                 if shift == 0 {
                     continue;
                 }
@@ -416,7 +423,8 @@ impl World {
         let shear =
             ((outward - 6.5).max(0.0) * 0.020 + (lateral.abs() - 3.7).max(0.0) * 0.025).min(0.36);
         // The actual signed angle can wrap past a half turn; an inverted cup drains.
-        let gravity_capacity = (((pitch - 0.52).cos() - 0.05) / 0.50).clamp(0.0, 1.0);
+        let gravity_capacity =
+            (((pitch - CUP_LEVEL).cos() - CUP_OFFSET) / CUP_RANGE).clamp(0.0, 1.0);
         let retained = (CAPACITY as f32 * (gravity_capacity - shear).max(0.0)) as i32;
         let excess = (self.load - retained).max(0);
         if excess == 0 {
@@ -625,12 +633,53 @@ impl World {
 pub extern "C" fn world_new(dense: u32) -> *mut World {
     Box::into_raw(Box::new(World::new(dense != 0)))
 }
+/// Seed the escape yard using the dimensions of its rendered concrete apron.
+#[no_mangle]
+pub extern "C" fn escape_new(
+    dense: u32,
+    lip: f32,
+    far: f32,
+    half_width: f32,
+    deck_mm: i32,
+    bank_x: f32,
+    bank_z: f32,
+    bevel_run: f32,
+    bevel_rise: f32,
+) -> *mut World {
+    let mut w = World::new(dense != 0);
+    w.initial = 0;
+    for z in 0..N {
+        for x in 0..N {
+            let i = z * N + x;
+            let (px, pz) = (coord(x), coord(z));
+            let rock = px >= lip && px <= far && pz.abs() <= half_width;
+            if rock {
+                w.base[i] = deck_mm
+                    - (1000. * bevel_rise * (1. - (px - lip) / bevel_run).max(0.)).round() as i32;
+            }
+            let bank = (2.05 - 0.65 * (px - bank_x).hypot((pz - bank_z) * 0.90)).max(0.);
+            // Some loose talus remains under the broken approach.
+            let toe = if px < lip {
+                (0.19 - (lip - px) * 0.27 - (pz.abs() - 1.25).max(0.) * 0.22).max(0.)
+            } else {
+                0.
+            };
+            w.height[i] = if w.base[i] == 0 {
+                (1000. * bank.max(toe)).round() as i32
+            } else {
+                0
+            };
+            w.initial += i64::from(w.height[i]);
+        }
+    }
+    Box::into_raw(Box::new(w))
+}
 #[no_mangle]
 pub extern "C" fn avalanche_new(dense: u32) -> *mut World {
     Box::into_raw(Box::new(World::avalanche(dense != 0)))
 }
 /// # Safety
-/// Pass a live handle returned by `world_new` or `avalanche_new` exactly once.
+/// Pass a live handle from one of the world constructors exactly once.
 /// All references and JavaScript memory views into this world must be retired.
 #[no_mangle]
 pub unsafe extern "C" fn world_drop(w: *mut World) {
@@ -722,6 +771,12 @@ pub extern "C" fn world_load(w: &World) -> i32 {
 #[no_mangle]
 pub extern "C" fn bucket_capacity() -> i32 {
     CAPACITY
+}
+/// Tooth angle at which a stationary cup retains half the current payload.
+#[no_mangle]
+pub extern "C" fn half_pour_pitch(load: i32) -> f32 {
+    let retained = load.clamp(0, CAPACITY) as f32 * 0.5 / CAPACITY as f32;
+    CUP_LEVEL - (CUP_OFFSET + CUP_RANGE * retained).acos()
 }
 #[no_mangle]
 pub extern "C" fn world_bay(w: &World) -> i32 {
@@ -1061,6 +1116,24 @@ mod tests {
         }
         assert_eq!(w.load, 0);
         assert_eq!(w.balance(), 0);
+    }
+    #[test]
+    fn escape_deck_and_half_pour_preserve_material() {
+        // This test owns the handle from the public browser constructor.
+        let mut world =
+            unsafe { Box::from_raw(escape_new(0, 5.25, 15.5, 2.55, 720, 2.85, -4.45, 0.5, 0.32)) };
+        assert!(world.surface(2.85, -4.45) > 1.9);
+        assert!(world.surface(5.0, 0.0) < 0.2);
+        assert!((world.surface(8.0, 0.0) - 0.72).abs() < 0.002);
+        let load = CAPACITY * 3 / 4;
+        world.load = load;
+        world.initial += i64::from(load);
+        for _ in 0..128 {
+            world.tool(4.7, 2.6, 1.1, 0., half_pour_pitch(load));
+            world.tick();
+        }
+        assert!((world.load - load / 2).abs() <= 2);
+        assert_eq!(world.balance(), 0);
     }
     #[test]
     fn tracks_lower_the_surface_and_preserve_material() {

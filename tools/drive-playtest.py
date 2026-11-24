@@ -19,7 +19,7 @@ with sync_playwright() as pw:
     page = browser.new_page(viewport={'width':1280,'height':800})
     errors = []
     page.on('pageerror',lambda error:errors.append(str(error)))
-    page.goto(args.url)
+    page.goto(args.url + ('&' if '?' in args.url else '?') + 'yard=quarry')
     page.wait_for_function('window.sandLab?.state().chassis.massKg>20000',timeout=45000)
     state = lambda: page.evaluate('sandLab.state()')
     def ticks(count):

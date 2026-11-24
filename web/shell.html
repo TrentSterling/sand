@@ -27,10 +27,14 @@
     </header>
 
     <section class="work-order" aria-label="Current job">
-      <h2 id="goal">Load the weigh bay</h2>
+      <h2 id="goal">Build your way out</h2>
+      <p id="missionBrief">Build a sand ramp. Park both tracks on the flagged exit deck.</p>
+      <div id="rampReadings" aria-label="Sand height at the concrete lip"><span>Left <b id="leftSand">0 cm</b></span><span>Right <b id="rightSand">0 cm</b></span></div>
+      <p id="finishResult" hidden></p>
+      <button id="retry" class="primary" hidden>Try fewer scoops</button>
       <button id="nextJob" class="primary" hidden>Next order</button>
       <dl class="quantities">
-        <div><dt>Delivered</dt><dd id="delivered">0.00 m³</dd></div>
+        <div><dt id="quantityLabel">Scoops</dt><dd id="delivered">0.00 m³</dd></div>
         <div><dt>In bucket</dt><dd id="bucketFill">0.00 m³</dd></div>
       </dl>
     </section>
@@ -60,9 +64,10 @@
 
     <aside id="help" class="panel" aria-labelledby="helpTitle" hidden>
       <h2 id="helpTitle">Operator guide</h2>
-      <p>Dig into the bank, lift, swing to the weigh bay and dump. Use the assisted controls below or work each joint in manual mode.</p>
+      <p id="yardGuide">Tap the bank for a bucketful, then tap the ground to place it. Choose Half pour to save sand for a second spot. An orange cross marks where a track stalled.</p>
       <dl class="keymap">
-        <div><dt>Assisted cycle</dt><dd><kbd>1</kbd> to <kbd>4</kbd></dd></div>
+        <div><dt>Escape job</dt><dd>Tap sand to scoop, then tap to place. Drive with the arrows.</dd></div>
+        <div><dt>Quarry cycle</dt><dd><kbd>1</kbd> to <kbd>4</kbd></dd></div>
         <div><dt>Boom</dt><dd><kbd>W</kbd> <kbd>S</kbd></dd></div>
         <div><dt>Stick</dt><dd><kbd>E</kbd> <kbd>D</kbd></dd></div>
         <div><dt>Bucket</dt><dd><kbd>R</kbd> <kbd>F</kbd></dd></div>
@@ -72,7 +77,7 @@
         <div><dt>Cut view</dt><dd>Drag the teeth in side view. Hold R or F to change the lip angle.</dd></div>
       </dl>
       <div class="panel-actions">
-        <button id="offline">Download offline</button><button id="reset">Reset quarry</button><button id="audio">Sound off</button>
+        <button id="switchYard">Quarry orders</button><button id="offline">Download offline</button><button id="reset">Restart job</button><button id="audio">Sound off</button>
       </div>
     </aside>
 
@@ -87,6 +92,19 @@
         <button data-action="lift"><kbd>2</kbd> Lift</button>
         <button data-action="swing"><kbd>3</kbd> Swing</button>
         <button data-action="dump"><kbd>4</kbd> Dump</button>
+      </div>
+      <div id="rampPanel" hidden>
+        <div class="ramp-load">
+          <button id="borrow"><kbd>1</kbd> Scoop bank</button>
+          <button id="placeLeft"><kbd>2</kbd> Fill left track</button>
+          <button id="placeRight"><kbd>3</kbd> Fill right track</button>
+          <button id="split" aria-pressed="false" title="Leave about half the load in the bucket after the next pour">Half pour</button>
+        </div>
+        <div class="ramp-drive" role="group" aria-label="Hold to drive">
+          <button data-hold="steerLeft" aria-label="Steer left">&#8630;</button>
+          <button data-hold="driveBack">Reverse</button><button data-hold="driveForward" title="Hold to drive toward the exit">Drive to exit</button>
+          <button data-hold="steerRight" aria-label="Steer right">&#8631;</button>
+        </div>
       </div>
       <div id="manualPanel" class="manual-controls" role="group" aria-label="Hold to move machine" hidden>
         <fieldset><legend>Boom</legend><div><button data-hold="boomUp">Up</button><button data-hold="boomDown">Down</button></div></fieldset>

@@ -1,3 +1,4 @@
+import { deckTop, onDeck } from './escape.js';
 import * as THREE from 'three';
 
 const N = 256,
@@ -15,8 +16,10 @@ export function createGround(scene) {
   const packed = new THREE.BufferAttribute(new Uint8Array(N * N), 1, true);
   packed.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('packedSoil', packed);
-  const trackFrame = {value: new THREE.Matrix4()};
-  let seededDatum = false;
+  const trackFrame = { value: new THREE.Matrix4() };
+  let seededDatum = false,
+    escape = false;
+  const rock = new Int16Array(N * N);
   const pos = geometry.attributes.position,
     normal = geometry.attributes.normal;
   pos.setUsage(THREE.DynamicDrawUsage);
@@ -97,7 +100,7 @@ export function createGround(scene) {
   }
   const apronGeom = new THREE.BufferGeometry(),
     indices = [];
-  apronGeom.setAttribute('packedSoil',new THREE.BufferAttribute(new Uint8Array(8),1,true));
+  apronGeom.setAttribute('packedSoil', new THREE.BufferAttribute(new Uint8Array(8), 1, true));
   apronGeom.setAttribute('bankDatum', new THREE.BufferAttribute(new Float32Array(8), 1));
   for (let i = 0; i < 4; i++) {
     const j = (i + 1) % 4;
@@ -118,7 +121,13 @@ export function createGround(scene) {
     const heights = new Int32Array(memory, core.world_height(world), N * N);
     const compact = new Uint8Array(memory, core.world_compact(world), N * N);
     if (!seededDatum) {
-      for (let i = 0; i < heights.length; i++) bankDatum.array[i] = heights[i] * 0.001;
+      for (let i = 0; i < heights.length; i++) {
+        rock[i] =
+          escape && onDeck(((i % N) + 0.5) * SCALE - 16, ((i >> 8) + 0.5) * SCALE - 16)
+            ? Math.round(deckTop(((i % N) + 0.5) * SCALE - 16) * 1000) - 8
+            : 0;
+        bankDatum.array[i] = (rock[i] + heights[i]) * 0.001;
+      }
       bankDatum.needsUpdate = true;
       seededDatum = true;
     }
@@ -134,7 +143,7 @@ export function createGround(scene) {
       }
       if (changed) activeMap.needsUpdate = true;
     }
-    const depth = (i) => heights[i] - ((heights[i] * compact[i]) >> 11);
+    const depth = (i) => rock[i] + heights[i] - ((heights[i] * compact[i]) >> 11);
     lo.fill(N);
     hi.fill(-1);
     for (let tile = 0; tile < flags.length; tile++) {
@@ -156,7 +165,7 @@ export function createGround(scene) {
         const nz =
           (depth(Math.max(0, z - 1) * N + x) - depth(Math.min(N - 1, z + 1) * N + x)) * 0.004;
         const inv = 1 / Math.hypot(nx, 1, nz);
-        packed.array[i]=compact[i];
+        packed.array[i] = compact[i];
         pos.setY(i, depth(i) * 0.001);
         normal.setXYZ(i, nx * inv, inv, nz * inv);
       }
@@ -164,8 +173,8 @@ export function createGround(scene) {
         count = (hi[z] - lo[z] + 1) * 3;
       pos.addUpdateRange(start, count);
       normal.addUpdateRange(start, count);
-      packed.addUpdateRange(start/3,count/3);
-      bytes += count * 8 + count/3;
+      packed.addUpdateRange(start / 3, count / 3);
+      bytes += count * 8 + count / 3;
     }
     if (bytes) {
       pos.needsUpdate = normal.needsUpdate = packed.needsUpdate = true;
@@ -175,6 +184,10 @@ export function createGround(scene) {
   }
   return {
     sync,
+    reset: (isEscape) => {
+      seededDatum = false;
+      escape = isEscape;
+    },
     trackPose: (matrix) => trackFrame.value.copy(matrix).invert(),
     inspect: (on) => {
       inspect.value = Number(on);

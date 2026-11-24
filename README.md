@@ -1,27 +1,34 @@
 # SandLab
 
-Drive a tracked excavator in a small working quarry. Curl the bucket into the bank, lift a load, swing over the concrete bay, and watch where the sand actually lands. Spills stay in the yard. Take the second order to build a stockpile within a marked footprint, then keep the controls in free dig.
+The exit deck stands just above the excavator's tracks. Take a bite out of the bank, pour sand against the concrete lip, and try driving up what you built. The gate lifts when both tracks are on the deck and the machine comes to a stop.
 
-**[Play SandLab on GitHub Pages](https://tront.xyz/sand/)** · [Download the standalone HTML](https://github.com/TrentSterling/sand/raw/refs/heads/main/index.html)
+**[Play Build Your Way Out on GitHub Pages](https://tront.xyz/sand/)** · [Open the quarry orders](https://tront.xyz/sand/?yard=quarry) · [Download the standalone HTML](https://github.com/TrentSterling/sand/raw/refs/heads/main/index.html)
 
 [Watch the driving crest test](https://tront.xyz/sand/review/drive/) · [Compare the original and revised excavator from 15 angles](https://tront.xyz/sand/review/) · [Read the blind reviews and mechanical results](GAUNTLET.md)
 
-![SandLab excavator at the working face of the quarry](evidence/quarry.png)
+![Four game captures showing a bucket placement, the built approach, a test climb and the excavator parked on the exit deck](evidence/escape-approach.webp)
+
+## Build your way out
+
+Tap a spot on the bank to cut there. With sand in the bucket, tap the spot where you want to pour. **Half pour** keeps some sand in the bucket for a second placement. The two gauges show how much sand is supporting each approach at the lip. If you stall, back up and look for the orange cross where the low track needs help.
+
+Hold **Drive to exit** to line up with the deck, or steer the tracks yourself. Your browser remembers the fewest scoops you escaped with. A faster run breaks a tie.
 
 ## In the operator seat
 
 | Control | Action |
 | --- | --- |
-| **1, 2, 3, 4** or the four on-screen buttons | Dig, lift, swing to the current delivery point, dump. Each button runs the articulated machine through a movement. The soil solver decides how much it picks up and where it lands. |
+| **1, 2, 3** in the escape job | Scoop at the bank or place at the left or right track approach. Tap the ground for a custom cut or pour. |
+| **1, 2, 3, 4** in quarry orders | Dig, lift, swing to the delivery point, dump. The soil solver decides how much the bucket picks up and where it lands. |
 | **W / S**, **E / D**, **R / F** | Raise / lower boom, extend / draw the stick, curl / tip the bucket. The first joint input switches to manual. |
 | **Q / A**, **arrow keys** | Slew the upper house, or drive and steer the tracks. |
-| **Double-click terrain** | Position the cutting edge at a reachable point using two-link inverse kinematics. |
+| **Double-click terrain in manual** | Position the cutting edge at a reachable point using two-link inverse kinematics. |
 | **Cut view** | Look across the pin axes and drag the teeth through the bank with a mouse or finger. Hold R or F to adjust the bucket pitch while dragging. The cursor changes colour when the teeth fall short. |
 | **Drag / scroll or pinch** | Orbit and zoom. The manual panel also has hold controls for touch. |
 | **CPU lab** | Pause, single-step, show track forces and centre of mass, show awake terrain tiles, or replay the same inputs through two CPU schedulers. |
 | **Help** | Toggle engine sound, reset the quarry, or save the one-file offline build. |
 
-The first order weighs 0.75 m³ of delivered sand. The second calls for 1.50 m³ inside the stockpile ring. Both count material that actually reaches the destination. Volumes are reported as their loose-sand equivalents so compacting a pile under the tracks cannot change the score.
+Open **Help → Quarry orders** for the original yard. The first order weighs 0.75 m³ of delivered sand. The second calls for 1.50 m³ inside the stockpile ring, then unlocks free dig. Both count material that reaches the destination. Volumes are reported as loose-sand equivalents so compacting a pile under the tracks cannot change the score.
 
 ## Driving the crawler
 
@@ -78,4 +85,6 @@ node tools/verify-controls.mjs
 node tools/verify-drive.mjs
 ```
 
-For browser verification, install Python Playwright and Chrome. Run `python tools/playtest.py` to complete both jobs, compare the solvers and open the downloaded build with network requests blocked. Run `python tools/drive-playtest.py` for the keyboard crest run and driving gallery. Run `python -m playwright install chromium` and `python tools/inspect-machine.py` for the orthographic model review.
+For browser verification, install Python Playwright and its Chromium browser. Run `python tools/escape-playtest.py` for a mouse and keyboard escape, a metered two-spot pour, a retry and a saved best. Add `--touch` to drive using a phone-sized touch viewport. Run `node tools/gauntlet-build.mjs candidate` followed by `python tools/escape-gauntlet.py` for the matched zero-, one-, two- and four-load approaches. [Drive comparison](evidence/escape.json)
+
+Run `python tools/playtest.py --channel chromium` to complete both quarry orders, compare the solvers and open the downloaded build with network requests blocked. Run `python tools/drive-playtest.py` with Chrome for the keyboard crest test. Run `python tools/inspect-machine.py` for the orthographic model review.

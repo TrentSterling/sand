@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { carrierClearance, createMachine, machineDimensions } from './machine.js';
 import { armIK, forward, toolAttitude } from './arm.js';
+import { createExit, escapeYard, newEscapeWorld, parkOnDeck } from './escape.js';
 import { createCrawler } from './crawler.js';
-import { driveGround, yardClearance } from './drive-ground.js';
+import { driveGround, yardClearance, escapeClearance } from './drive-ground.js';
 import { createContactView } from './contact-view.js';
 import { createQuarry } from './quarry.js';
 import { createGround, createStream } from './terrain.js';
@@ -75,6 +76,79 @@ async function start() {
     treads = createTreads(THREE, scene);
   scene.add(rig.root);
   const chassis = createCrawler();
+  const exit = createExit(scene);
+  const placeTarget = new THREE.Mesh(
+    new THREE.RingGeometry(0.23, 0.3, 36),
+    new THREE.MeshBasicMaterial({
+      color: 0xffc24a,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.92,
+    }),
+  );
+  placeTarget.rotation.x = -Math.PI / 2;
+  placeTarget.renderOrder = 4;
+  scene.add(placeTarget);
+  const rampLeft = { x: escapeYard.lip - 0.49, z: -1.08 },
+    rampRight = { x: escapeYard.lip - 0.49, z: 1.08 };
+  let escapeMode = new URLSearchParams(location.search).get('yard') !== 'quarry';
+  let scoops = 0,
+    tookLoad = false,
+    startFrame = null,
+    parkTicks = 0,
+    finishTime = 0;
+  let aimedDrop = null,
+    markerSpot = null,
+    stallTicks = 0,
+    brakingOnDeck = false;
+  const brief = 'Build a sand ramp. Park both tracks on the flagged exit deck.';
+  let splitNext = false,
+    stallSide = '';
+  const bestKey = 'sandlab.escape.v1';
+  function bestRun() {
+    try {
+      const r = JSON.parse(localStorage.getItem(bestKey));
+      return r && Number.isInteger(r.scoops) && Number.isFinite(r.seconds) ? r : null;
+    } catch {
+      return null;
+    }
+  }
+  function laneHeight(spot) {
+    // Average across the grouser width immediately before the concrete.
+    let sum = 0;
+    for (const dx of [0.1, 0.27])
+      for (const dz of [-0.24, 0, 0.24]) sum += ground(escapeYard.lip - dx, spot.z + dz);
+    return sum / 6;
+  }
+  function startRun() {
+    if (escapeMode && startFrame === null && !done) startFrame = frame;
+  }
+  function finishEscape() {
+    exit.clearMarks();
+    stallSide = '';
+    done = true;
+    finishTime = Math.max(1, Math.round((frame - (startFrame ?? 0)) / 60));
+    const past = bestRun();
+    const best =
+      !past || scoops < past.scoops || (scoops === past.scoops && finishTime < past.seconds);
+    if (best) {
+      try {
+        localStorage.setItem(bestKey, JSON.stringify({ scoops, seconds: finishTime }));
+      } catch {}
+    }
+    byId('goal').textContent = 'You made it out.';
+    byId('missionBrief').textContent =
+      scoops + ' scoop' + (scoops === 1 ? '' : 's') + ' in ' + finishTime + ' s.';
+    byId('finishResult').textContent = best
+      ? 'Personal best'
+      : 'Best: ' + past.scoops + ' scoops in ' + past.seconds + ' s';
+    byId('finishResult').hidden = false;
+    byId('nextJob').textContent = 'Quarry orders';
+    byId('nextJob').hidden = false;
+    byId('retry').hidden = false;
+    note('Both tracks are on the exit deck.');
+  }
   let slewRate = 0;
   const contactView = createContactView(scene, chassis);
   let sampleDrive,
@@ -178,11 +252,13 @@ async function start() {
   const massHere = () => (job === 1 ? markAmount() : core.world_bay(w));
   const goal = () => (job === 0 ? 0.75 : 1.5);
   const targetText = () =>
-    job === 0
-      ? 'Deliver 0.75 m³ to the weigh bay'
-      : job === 1
-        ? 'Build a 1.50 m³ stockpile inside the ring'
-        : 'Free dig · open quarry';
+    escapeMode
+      ? 'Build your way out'
+      : job === 0
+        ? 'Deliver 0.75 m³ to the weigh bay'
+        : job === 1
+          ? 'Build a 1.50 m³ stockpile inside the ring'
+          : 'Free dig · open quarry';
   let framing = 1;
   function resize(home = false) {
     const width = innerWidth,
@@ -195,10 +271,19 @@ async function start() {
     camera.updateProjectionMatrix();
     const factor = clamp(1.02 / aspect, 1, 2.25);
     if (home) {
-      controls.target.set(1.15, 1.5, 0.9);
+      controls.target.set(
+        escapeMode ? 3.2 : 1.15,
+        escapeMode ? 0.95 : 1.5,
+        escapeMode ? -0.7 : 0.9,
+      );
       camera.position
         .copy(controls.target)
-        .add(new THREE.Vector3(8.7, 6.5, 12.3).multiplyScalar(factor));
+        .add(
+          (escapeMode
+            ? new THREE.Vector3(-2.4, 9.3, 16.3)
+            : new THREE.Vector3(8.7, 6.5, 12.3)
+          ).multiplyScalar(factor),
+        );
       controls.update();
     } else if (factor !== framing) {
       camera.position
@@ -224,7 +309,12 @@ async function start() {
     contactStop = false;
     manual = on;
     byId('manualPanel').hidden = !on;
-    byId('assistPanel').hidden = on;
+    byId('assistPanel').hidden = on || escapeMode;
+    byId('rampPanel').hidden = on || !escapeMode;
+    aimedDrop = null;
+    markerSpot = null;
+    placeTarget.visible = false;
+    splitNext = false;
     byId('manual').setAttribute('aria-expanded', String(on));
     byId('manual').setAttribute('aria-pressed', String(on));
     byId('manual').textContent = on ? 'Assisted' : 'Manual';
@@ -236,7 +326,9 @@ async function start() {
     note(
       on
         ? 'Hold a control to move. Double-click the ground to position the teeth.'
-        : 'Choose Dig to line up the next cut.',
+        : escapeMode
+          ? 'Tap the bank to scoop. With a load, tap where you want it.'
+          : 'Choose Dig to line up the next cut.',
     );
   }
   function select(name) {
@@ -259,14 +351,17 @@ async function start() {
     }
     if (w) core.world_drop(w);
     if (sideView) toggleCutView();
-    w = core.world_new(0);
-    sampleDrive = driveGround(core, w);
+    w = escapeMode ? newEscapeWorld(core, 0) : core.world_new(0);
+    exit.group.visible = escapeMode;
+    exit.reset();
+    terrain.reset(escapeMode);
+    sampleDrive = driveGround(core, w, escapeMode);
     shoeEvents.fill(null);
     drove = false;
     base = { x: 0, y: 0, z: 0 };
     trackYaw = 0;
     travel = 0;
-    job = 0;
+    job = escapeMode ? -1 : 0;
     done = false;
     orderTime = 0;
     clock = 0;
@@ -278,7 +373,31 @@ async function start() {
     previousJointState = [];
     availableTorque = 1;
     treads.reset();
+    scoops = 0;
+    tookLoad = false;
+    parkTicks = 0;
+    startFrame = null;
+    finishTime = 0;
+    stallTicks = 0;
+    brakingOnDeck = false;
+    const best = escapeMode && bestRun();
+    byId('finishResult').hidden = !best;
+    byId('retry').hidden = true;
+    if (best)
+      byId('finishResult').textContent =
+        'Best: ' + best.scoops + ' scoops in ' + best.seconds + ' s';
+    byId('quantityLabel').textContent = escapeMode ? 'Scoops' : 'Delivered';
+    byId('missionBrief').hidden = !escapeMode;
+    stallSide = '';
+    byId('missionBrief').textContent = brief;
+    byId('switchYard').textContent = escapeMode ? 'Quarry orders' : 'Build your way out';
+    byId('yardGuide').textContent = escapeMode
+      ? 'Tap the bank for a bucketful, then tap the ground to place it. Choose Half pour to save sand for a second spot. An orange cross marks where a track stalled.'
+      : 'Dig into the bank, lift, swing to the weigh bay and dump. Complete both orders to unlock free dig.';
+    byId('switchYard').disabled = false;
+    window.sandLab.lastBenchmark = null;
     p = { ...armIK(5.82, 2.65, -0.74), yaw: 0 };
+    if (escapeMode) p.yaw = -Math.atan2(escapeYard.bank.z, escapeYard.bank.x);
     chassis.reset(p, 0);
     slewRate = 0;
     driveInput = steerInput = 0;
@@ -287,7 +406,11 @@ async function start() {
     byId('nextJob').hidden = true;
     byId('goal').textContent = targetText();
     byId('benchResult').textContent = '';
-    note('Take a bite from the bank. Start with Dig.');
+    note(
+      escapeMode
+        ? 'Tap the sand bank to take a bite, or press Scoop bank.'
+        : 'Take a bite from the bank. Start with Dig.',
+    );
     updateMachine();
     terrain.sync(core, w);
     stream(core, w);
@@ -296,6 +419,10 @@ async function start() {
   }
   function nextJob() {
     if (busy || !done || job >= 2) return;
+    if (escapeMode) {
+      switchYard();
+      return;
+    }
     job++;
     targetBase = massHere();
     orderTime = clock;
@@ -310,25 +437,32 @@ async function start() {
     );
     hud();
   }
+  function switchYard() {
+    if (busy) return;
+    escapeMode = !escapeMode;
+    byId('help').hidden = byId('lab').hidden = true;
+    for (const name of ['help', 'lab'])
+      byId(name + 'Toggle').setAttribute('aria-expanded', 'false');
+    reset();
+  }
   function aimed(target) {
     const local = rig.root.worldToLocal(
       new THREE.Vector3(target.x, target.y ?? ground(target.x, target.z), target.z),
     );
     return { r: Math.hypot(local.x, local.z), h: local.y, yaw: -Math.atan2(local.z, local.x) };
   }
-  function queue(name) {
+  function queue(name, cut = source, drop = destination()) {
     if (busy) return;
     if (manual) setManual(false);
     if (paused) setPause(false);
     const start = forward(p),
-      bank = aimed(source),
-      dest = aimed(destination());
+      dest = aimed(drop);
     const make = (r, h, pitch, yaw, ticks) => ({ r, h, pitch, yaw, ticks });
     let goals;
     switch (name) {
       case 'dig': {
-        const angle = Math.atan2(source.z - base.z, source.x - base.x);
-        const radial = Math.hypot(source.x - base.x, source.z - base.z);
+        const angle = Math.atan2(cut.z - base.z, cut.x - base.x);
+        const radial = Math.hypot(cut.x - base.x, cut.z - base.z);
         const face = (offset, depth) => {
           const x = base.x + (radial + offset) * Math.cos(angle),
             z = base.z + (radial + offset) * Math.sin(angle);
@@ -363,21 +497,71 @@ async function start() {
             Math.max(100, Math.ceil(Math.abs(angleDelta(start.yaw, dest.yaw)) * dest.r * 22)),
           ),
         ];
-        note(job === 1 ? 'Slewing to the stockpile ring.' : 'Slewing to the weigh bay.');
+        note(
+          escapeMode
+            ? 'Carrying the load to your mark.'
+            : job === 1
+              ? 'Slewing to the stockpile ring.'
+              : 'Slewing to the weigh bay.',
+        );
         break;
-      case 'dump':
+      case 'dump': {
+        const splitting = escapeMode && splitNext;
+        const angle = splitting ? core.half_pour_pitch(core.world_load(w)) : -1.22;
+        splitNext = false;
         goals = [
-          make(start.r, start.h, -1.22, start.yaw, 51),
-          make(start.r, start.h, -1.22, start.yaw, 32),
+          make(start.r, start.h, angle, start.yaw, 51),
+          make(start.r, start.h, angle, start.yaw, 32),
         ];
-        note('Opening the bucket. The load scores where it lands.');
+        if (splitting) goals.push(make(start.r, start.h, 0.44, start.yaw, 40));
+        note(
+          splitting
+            ? 'Metering sand over the lip.'
+            : escapeMode
+              ? 'Tipping onto the approach.'
+              : 'Opening the bucket. The load scores where it lands.',
+        );
         break;
+      }
       default:
         return;
     }
     sequence = goals;
     action = name;
     select(name);
+  }
+  function commandGround(target, drop) {
+    if (busy || done || !escapeMode || action) return;
+    if (manual) setManual(false);
+    const load = core.world_load(w);
+    if (drop && load < 180) {
+      note('Take a bite from the bank first.');
+      return;
+    }
+    if (!drop && load >= 180) {
+      note('Place the sand in the bucket first.');
+      return;
+    }
+    const aim = aimed(target);
+    if (aim.r < 2.15) {
+      note('Too close to the tracks. Reverse to give the bucket room.');
+      return;
+    }
+    if (aim.r > 7.55) {
+      note('Out of reach. Drive closer, or choose another spot.');
+      return;
+    }
+    if (!drop && ground(target.x, target.z) < 0.12) {
+      note('Aim at loose sand on the bank.');
+      return;
+    }
+    startRun();
+    markerSpot = { x: target.x, z: target.z };
+    placeTarget.visible = true;
+    placeTarget.material.color.setHex(drop ? 0xffab38 : 0x9ef6da);
+    aimedDrop = drop ? markerSpot : null;
+    if (drop) queue('swing', source, target);
+    else queue('dig', target);
   }
   function animateArm() {
     if (!sequence.length) return;
@@ -434,22 +618,46 @@ async function start() {
       sequence.shift();
       if (!sequence.length) {
         const load = core.world_load(w);
+        if (escapeMode && action === 'swing' && aimedDrop) {
+          const target = aimedDrop;
+          aimedDrop = null;
+          queue('dump', source, target);
+          return;
+        }
         if (action === 'dig')
           note(
             load > 500
-              ? 'Load caught. Lift it clear of the bank.'
+              ? escapeMode
+                ? fmt(load) + ' in the bucket. Tap where you want it.'
+                : 'Load caught. Lift it clear of the bank.'
               : 'Shallow cut. Move closer or lower the teeth in manual mode.',
           );
         if (action === 'lift') note('Bucket up. Swing to the delivery point.');
         if (action === 'swing') note('Over the target. Dump when ready.');
-        if (action === 'dump' && !done) note('Load released. Dig again for another pass.');
-        if (poseError > 0.1 || contactStop)
+        if (action === 'dump' && !done) {
+          if (escapeMode && stallSide)
+            byId('missionBrief').textContent =
+              'Test the repaired approach. Park both tracks on the deck.';
+          note(
+            escapeMode
+              ? load >= 180
+                ? fmt(load) + ' left. Pick a spot for the rest.'
+                : 'Hold Drive to exit to test the ramp, or scoop again.'
+              : 'Load released. Dig again for another pass.',
+          );
+        }
+        if (
+          (poseError > 0.1 || contactStop) &&
+          !(escapeMode && (action === 'dump' || (action === 'dig' && load > 500)))
+        )
           note(
             contactStop
               ? 'Tool at hard contact. Raise the boom or draw the stick back.'
               : 'Joint stop reached. Choose a closer point or reposition the tracks.',
           );
         action = '';
+        markerSpot = null;
+        placeTarget.visible = false;
         select('');
       }
     }
@@ -468,9 +676,13 @@ async function start() {
     ArrowLeft: 'steerLeft',
     ArrowRight: 'steerRight',
   };
+  function held(key) {
+    if (keyHeld.has(key)) return true;
+    for (const value of pointerHeld.values()) if (value === key) return true;
+    return false;
+  }
+  const axis = (a, b) => Number(held(a)) - Number(held(b));
   function moveManual() {
-    const held = (k) => keyHeld.has(k) || [...pointerHeld.values()].includes(k);
-    const axis = (a, b) => Number(held(a)) - Number(held(b));
     const curlInput = axis('curlIn', 'curlOut') * 0.026 * availableTorque;
     if (dragTarget) {
       dragTarget.pitch = clamp(dragTarget.pitch + curlInput, -3.1, 2.9);
@@ -496,8 +708,6 @@ async function start() {
     const wantedSlew = axis('left', 'right') * 0.96;
     slewRate += clamp(wantedSlew - slewRate, -1.12 * step, 1.12 * step);
     p.yaw += slewRate * step;
-    driveInput = axis('driveForward', 'driveBack');
-    steerInput = axis('steerLeft', 'steerRight');
   }
   function updateMachine() {
     const { x, y, z } = chassis.position;
@@ -565,7 +775,28 @@ async function start() {
       targetMarker.material.color.setHex(poseError > 0.15 || contactStop ? 0xf07b46 : 0xb4e47c);
     }
     const bodyStart = performance.now();
-    chassis.step(p, core.world_load(w) / units, driveInput, steerInput, sampleDrive, yardClearance);
+    if (manual || escapeMode) {
+      driveInput = axis('driveForward', 'driveBack');
+      steerInput = axis('steerLeft', 'steerRight');
+    }
+    if (escapeMode && !manual && driveInput > 0 && !steerInput) {
+      const heading = Math.atan2(base.z, 1.5);
+      steerInput = clamp(angleDelta(trackYaw, heading) * 3.6, -0.75, 0.75);
+    }
+    if (!held('driveForward')) brakingOnDeck = false;
+    if (escapeMode && !manual && driveInput > 0 && (brakingOnDeck || (!done && parkTicks > 0))) {
+      brakingOnDeck = true;
+      driveInput = steerInput = 0;
+    }
+    if (driveInput || steerInput) startRun();
+    chassis.step(
+      p,
+      core.world_load(w) / units,
+      driveInput,
+      steerInput,
+      sampleDrive,
+      escapeMode ? escapeClearance : yardClearance,
+    );
     drove ||= !!(driveInput || steerInput);
     chassisMs += performance.now() - bodyStart;
     updateMachine();
@@ -597,7 +828,40 @@ async function start() {
         Math.min(2, chassis.bucketForce / 105));
     visits = core.world_visited(w) * 2;
     clock += step;
-    maxLoad = Math.max(maxLoad, core.world_load(w));
+    const carried = core.world_load(w);
+    maxLoad = Math.max(maxLoad, carried);
+    if (escapeMode && !done) {
+      if (carried > 180 && !tookLoad) {
+        tookLoad = true;
+        scoops++;
+        startRun();
+      }
+      if (carried < 64) tookLoad = false;
+      parkTicks = base.x > escapeYard.lip && parkOnDeck(chassis) ? parkTicks + 1 : 0;
+      if (parkTicks === 5)
+        note(
+          manual
+            ? 'Both tracks aboard. Release travel to park.'
+            : 'Both tracks aboard. Braking on the exit deck.',
+        );
+      if (parkTicks >= 24 && Math.abs(chassis.speed) < 0.1) finishEscape();
+      stallTicks =
+        driveInput > 0 &&
+        base.x > escapeYard.lip - 2.45 &&
+        base.x < escapeYard.lip &&
+        Math.abs(chassis.speed) < 0.16
+          ? stallTicks + 1
+          : 0;
+      if (stallTicks === 40) {
+        stallSide = exit.markStall(chassis, ground);
+        const hint =
+          stallSide === 'both'
+            ? 'Both tracks stalled. Reverse and fill the orange crosses.'
+            : 'The ' + stallSide + ' track is low. Reverse and fill the orange cross.';
+        byId('missionBrief').textContent = hint;
+        note(hint);
+      }
+    }
     if (frame < 3600) {
       const j = frame * 5;
       replay[j] = tip.x;
@@ -605,8 +869,9 @@ async function start() {
       replay[j + 2] = tip.z;
       replay[j + 3] = yaw;
       replay[j + 4] = pitch;
-      if (action || manual) savedMotion++;
+      if (action || manual || driveInput || steerInput) savedMotion++;
     }
+    if (escapeMode && done && exit.open(step)) renderer.shadowMap.needsUpdate = true;
     frame++;
     if (trackMoved || frame === 1)
       treads.update(base.x, base.z, trackYaw, ground, (x, z) => {
@@ -626,7 +891,32 @@ async function start() {
   function hud() {
     markMass = massHere();
     const qty = Math.max(0, markMass - targetBase);
-    byId('delivered').textContent = fmt(job === 2 ? core.world_bay(w) : qty);
+    byId('delivered').textContent = escapeMode
+      ? String(scoops)
+      : fmt(job === 2 ? core.world_bay(w) : qty);
+    byId('rampReadings').hidden = !escapeMode || done;
+    if (escapeMode && !done) {
+      exit.refreshMarks(ground);
+      const left = laneHeight(rampLeft),
+        right = laneHeight(rampRight);
+      for (const [id, value] of [
+        ['leftSand', left],
+        ['rightSand', right],
+      ]) {
+        byId(id).textContent = Math.round(value * 100) + ' cm';
+        byId(id).parentElement.style.setProperty(
+          '--level',
+          Math.min(100, (100 * value) / (escapeYard.height - escapeYard.bevelRise)) + '%',
+        );
+      }
+    }
+    if (escapeMode) {
+      const loaded = core.world_load(w) >= 180;
+      byId('borrow').disabled = done || !!action || loaded;
+      byId('placeLeft').disabled = byId('placeRight').disabled = done || !!action || !loaded;
+      byId('split').disabled = done || !!action || !loaded;
+      byId('split').setAttribute('aria-pressed', String(splitNext));
+    }
     byId('bucketFill').textContent = fmt(core.world_load(w));
     if (sideView && dragTarget) {
       note(
@@ -653,7 +943,14 @@ async function start() {
       byId('draws').textContent = String(renderer.info.render.calls);
     }
     byId('fps').textContent = Math.round(fps) + ' fps';
-    if (!done && job < 2 && qty / units >= goal() && !core.world_air_len(w) && !action) {
+    if (
+      !escapeMode &&
+      !done &&
+      job < 2 &&
+      qty / units >= goal() &&
+      !core.world_air_len(w) &&
+      !action
+    ) {
       done = true;
       byId('nextJob').hidden = false;
       byId('nextJob').textContent = job === 0 ? 'Next order' : 'Free dig';
@@ -673,10 +970,15 @@ async function start() {
     try {
       const scenario = byId('scenario').value;
       const avalanche = scenario === 'avalanche',
-        make = avalanche ? core.avalanche_new : core.world_new;
+        actual = scenario === 'player' && savedMotion > 30 && (maxLoad > 100 || drove),
+        make = avalanche
+          ? core.avalanche_new
+          : actual && escapeMode
+            ? (dense) => newEscapeWorld(core, dense)
+            : core.world_new;
       sparse = make(0);
       dense = make(1);
-      const actual = scenario === 'player' && savedMotion > 30 && (maxLoad > 100 || drove);
+
       const frames = actual ? Math.min(frame, 3600) : avalanche ? 360 : 720;
       const times = [0, 0],
         pairs = [0, 0],
@@ -801,7 +1103,8 @@ async function start() {
   document.querySelectorAll('[data-hold]').forEach((e) => {
     e.onpointerdown = (event) => {
       event.preventDefault();
-      sequence = [];
+      interruptArm();
+      startRun();
       e.setPointerCapture(event.pointerId);
       pointerHeld.set(event.pointerId, e.dataset.hold);
     };
@@ -810,6 +1113,25 @@ async function start() {
       e.onpointerup =
         (event) => pointerHeld.delete(event.pointerId);
   });
+  function interruptArm() {
+    sequence = [];
+    action = '';
+    aimedDrop = null;
+    markerSpot = null;
+    placeTarget.visible = false;
+    splitNext = false;
+    select('');
+  }
+  byId('borrow').onclick = () => commandGround(escapeYard.bank, false);
+  byId('placeLeft').onclick = () => commandGround(rampLeft, true);
+  byId('placeRight').onclick = () => commandGround(rampRight, true);
+  byId('split').onclick = () => {
+    splitNext = !splitNext;
+    hud();
+    note(splitNext ? 'Pick the first spot for half the load.' : 'Pick a spot for the full load.');
+  };
+  byId('retry').onclick = () => reset();
+  byId('switchYard').onclick = switchYard;
   byId('helpToggle').onclick = () => togglePanels('help');
   byId('labToggle').onclick = () => togglePanels('lab');
   byId('forces').onclick = () =>
@@ -933,12 +1255,17 @@ async function start() {
     }
     if (keyMap[ev.code]) {
       ev.preventDefault();
-      if (!manual) setManual(true);
-      sequence = [];
+      if (!manual && !(escapeMode && ev.code.startsWith('Arrow'))) setManual(true);
+      interruptArm();
+      startRun();
       keyHeld.add(keyMap[ev.code]);
     }
-    if (!ev.repeat && /^Digit[1-4]$/.test(ev.code))
-      queue(['dig', 'lift', 'swing', 'dump'][Number(ev.code.slice(-1)) - 1]);
+    if (!ev.repeat && /^Digit[1-4]$/.test(ev.code)) {
+      const i = Number(ev.code.slice(-1)) - 1;
+      if (escapeMode) {
+        if (i < 3) commandGround([escapeYard.bank, rampLeft, rampRight][i], i > 0);
+      } else queue(['dig', 'lift', 'swing', 'dump'][i]);
+    }
   });
   document.addEventListener('keyup', (ev) => keyHeld.delete(keyMap[ev.code]));
   const inputsOff = () => {
@@ -950,31 +1277,69 @@ async function start() {
   };
   window.addEventListener('blur', inputsOff);
   document.addEventListener('visibilitychange', inputsOff);
-  byId('view').addEventListener('dblclick', (ev) => {
-    if (sideView) return;
-    if (!manual) setManual(true);
-    const rect = byId('view').getBoundingClientRect(),
-      cast = new THREE.Raycaster();
+  function groundPoint(ev) {
+    const rect = canvas.getBoundingClientRect();
     cast.setFromCamera(
-      new THREE.Vector2(
-        ((ev.clientX - rect.left) / rect.width) * 2 - 1,
-        1 - ((ev.clientY - rect.top) / rect.height) * 2,
-      ),
+      {
+        x: (2 * (ev.clientX - rect.left)) / rect.width - 1,
+        y: 1 - (2 * (ev.clientY - rect.top)) / rect.height,
+      },
       camera,
     );
     const hit = new THREE.Vector3();
-    for (let d = 0.25; d < 60; d += 0.075) {
+    for (let d = 0.18; d < 65; d += 0.11) {
       cast.ray.at(d, hit);
-      if (hit.y > core.world_ground(w, hit.x, hit.z)) continue;
-      const aim = aimed(hit);
-      sequence = [{ ...aim, pitch: -0.6, ticks: 65 }];
-      note('Positioning the cutting edge. Hold Curl to take a bite.');
-      break;
+      if (Math.abs(hit.x) > 15.95 || Math.abs(hit.z) > 15.95 || hit.y > ground(hit.x, hit.z))
+        continue;
+      let lo = d - 0.11,
+        hi = d;
+      for (let k = 0; k < 7; k++) {
+        const mid = (lo + hi) / 2;
+        cast.ray.at(mid, hit);
+        if (hit.y > ground(hit.x, hit.z)) lo = mid;
+        else hi = mid;
+      }
+      return cast.ray.at(hi, hit);
     }
+    return null;
+  }
+  let tap = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!e.isPrimary || e.button !== 0) {
+      tap = null;
+      return;
+    }
+    if (escapeMode && !manual && !sideView) tap = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 7) tap = null;
+  });
+  canvas.addEventListener('pointercancel', () => {
+    tap = null;
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    const click = tap;
+    tap = null;
+    if (!click || click.id !== e.pointerId || busy || paused || manual) return;
+    const hit = groundPoint(e);
+    if (hit) commandGround(hit, core.world_load(w) >= 180);
+  });
+  canvas.addEventListener('dblclick', (ev) => {
+    if (sideView || busy || (escapeMode && !manual)) return;
+    const hit = groundPoint(ev);
+    if (!hit) return;
+    if (!manual) setManual(true);
+    sequence = [{ ...aimed(hit), pitch: -0.6, ticks: 65 }];
+    note('Positioning the cutting edge. Hold Curl to take a bite.');
   });
   window.sandLab = {
     state: () => ({
       frame,
+      yard: escapeMode ? 'escape' : 'quarry',
+      scoops,
+      finishTime,
+      parkTicks,
+      stallSide,
       load: core.world_load(w),
       bay: core.world_bay(w),
       massError: core.world_balance(w),
@@ -1028,6 +1393,12 @@ async function start() {
       renderer.shadowMap.needsUpdate = true;
       treads.refresh((x, z) => core.world_ground(w, x, z));
     }
+    if (markerSpot)
+      placeTarget.position.set(
+        markerSpot.x,
+        ground(markerSpot.x, markerSpot.z) + 0.045,
+        markerSpot.z,
+      );
     if (sideView) frameCutView();
     else controls.update();
     contactView.update(ground);

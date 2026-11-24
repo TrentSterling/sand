@@ -72,7 +72,7 @@ def record(side):
         ])
         page = browser.new_page(viewport={'width': SIZE[0], 'height': SIZE[1]}, device_scale_factor=1)
         page.on('pageerror', lambda exc: errors.append(str(exc)))
-        page.goto(release.as_uri(), wait_until='load')
+        page.goto(release.as_uri()+'?yard=quarry', wait_until='load')
         page.wait_for_function("Boolean(window.gauntlet)", timeout=60000)
         gpu = page.evaluate('gauntlet.rendererName')
         if any(name in gpu.lower() for name in ('swiftshader', 'llvmpipe', 'software renderer')):
@@ -294,7 +294,7 @@ def check_carrier_stop():
     with sync_playwright() as pw:
         browser = pw.chromium.launch(channel='chrome',args=['--enable-gpu','--use-angle=d3d11'])
         page=browser.new_page()
-        page.goto((PRIVATE/'candidate'/'capture.html').as_uri())
+        page.goto((PRIVATE/'candidate'/'capture.html').as_uri()+'?yard=quarry')
         page.wait_for_function('Boolean(window.gauntlet)')
         data=page.evaluate("""()=>{
           const g=window.gauntlet;

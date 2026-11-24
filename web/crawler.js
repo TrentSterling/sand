@@ -306,7 +306,8 @@ export function createCrawler() {
       }
       if (obstacle) {
         const distance = obstacle(x, y, z, b);
-        if (distance < gap) {
+        // At a buried concrete face the rigid stop takes over from yielding sand.
+        if (distance < gap || (soil > 0.015 && distance <= 0.008)) {
           gap = distance;
           a.copy(b);
           soil = 0;
@@ -349,8 +350,8 @@ export function createCrawler() {
         pad.bias = gap > 0 ? -gap / dt : Math.min(0.32, Math.max(0, depth - 0.018) * 1.65);
       }
       pad.belt = pad.side && a.y > 0.3 ? belt[pad.side > 0 ? 1 : 0] : 0;
-      pad.forwardMu = soil > 0.02 ? 0.93 : 0.9;
-      pad.lateralMu = pad.side ? (turning ? 0.31 : 0.8) : 0.55;
+      pad.forwardMu = a.y < 0.2 ? 0.12 : soil > 0.02 ? 0.93 : 0.9;
+      pad.lateralMu = a.y < 0.2 ? 0.12 : pad.side ? (turning ? 0.31 : 0.8) : 0.55;
       pad.n.impulse = Math.min(prevN, pad.limit);
       pad.t.impulse = prevT;
       pad.l.impulse = prevL;
@@ -408,7 +409,8 @@ export function createCrawler() {
     // dissipate energy. This contact moment vanishes in flight and at rest.
     let rockingLoad = 0;
     for (const pad of active)
-      if (pad.side) rockingLoad += pad.normalLoad * (pad.soil > 0.02 ? 1 : 0.65);
+      if (pad.side)
+        rockingLoad += pad.normalLoad * (pad.n.axis.y > 0.2 ? 1 : 0) * (pad.soil > 0.02 ? 1 : 0.65);
     if (rockingLoad > 0) {
       for (let axis = 0; axis < 2; axis++) {
         a.set(axis, 0, 1 - axis).applyQuaternion(rotation);
@@ -539,6 +541,9 @@ export function createCrawler() {
     reset,
     step,
     state,
+    get speed() {
+      return actualSpeed;
+    },
     get bucketForce() {
       return toolForce;
     },

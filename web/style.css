@@ -166,3 +166,21 @@ body:has(#manualPanel:not([hidden])) #assistPanel { display: none; }
   .manual-controls { grid-template-columns: repeat(6,minmax(0,1fr)); gap: .3rem; }
   .manual-controls button { font-size: .75rem; }
 }
+
+#missionBrief,#finishResult{max-width:28ch;font-size:.88rem;color:var(--muted);margin:.3rem 0}
+#finishResult{color:var(--signal);font-weight:650}
+.ramp-load,.ramp-drive{display:grid;gap:.35rem}
+.ramp-load{grid-template-columns:repeat(3,minmax(0,1fr)) .79fr}
+.ramp-load #split[aria-pressed="true"]{color:var(--ink);background:var(--signal)}
+.ramp-drive{grid-template-columns:.6fr 1fr 1.4fr .6fr;margin-top:.35rem}
+.ramp-load button,.ramp-drive button{min-height:37px;touch-action:none}
+.ramp-load button:not(:disabled){border-color:#bc9858}
+.ramp-drive button{background:#222d28}
+.ramp-drive button:active{background:var(--signal);color:var(--ink)}
+#retry{margin-right:.35rem}
+#retry {pointer-events:auto}
+
+#rampReadings {display:flex;gap:.65rem;margin:.55rem 0 .25rem}
+#rampReadings span {--level:0%;min-width:5em;padding:0 0 .23rem;font-size:.73rem;color:var(--muted);
+  background:linear-gradient(90deg,var(--signal) var(--level),#475249 var(--level)) no-repeat left bottom/100% 2px}
+#rampReadings b {margin-left:.2rem;font:600 .76rem var(--mono);color:var(--paper)}

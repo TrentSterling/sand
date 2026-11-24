@@ -29,7 +29,7 @@ def capture(browser,side):
     page=browser.new_page(viewport={'width':1440,'height':864})
     errors=[]
     page.on('pageerror',lambda e:errors.append(str(e)))
-    page.goto((folder/'capture.html').as_uri())
+    page.goto((folder/'capture.html').as_uri()+'?yard=quarry')
     page.wait_for_function('window.gauntlet')
     page.evaluate("""()=>{
       const g=window.gauntlet;

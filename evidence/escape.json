@@ -1,0 +1,26 @@
+[
+  {
+    "scoops": 0,
+    "escaped": false,
+    "stoppedX": 3.182,
+    "massError": 0
+  },
+  {
+    "scoops": 1,
+    "escaped": false,
+    "stoppedX": 3.329,
+    "massError": 0
+  },
+  {
+    "scoops": 2,
+    "escaped": true,
+    "stoppedX": 8.251,
+    "massError": 0
+  },
+  {
+    "scoops": 4,
+    "escaped": true,
+    "stoppedX": 8.101,
+    "massError": 0
+  }
+]

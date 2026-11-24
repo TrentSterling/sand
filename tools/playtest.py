@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("--url", default=(ROOT / "index.html").as_uri())
 parser.add_argument("--out", default=str(ROOT / ".work" / "playtest"))
+parser.add_argument("--channel",choices=["chrome","chromium"],default="chrome")
 args = parser.parse_args()
+# These regressions run the original pair of quarry orders.
+def quarry_url(url):
+    return url + ("&" if "?" in url else "?") + "yard=quarry"
 out = Path(args.out).resolve()
 out.mkdir(parents=True, exist_ok=True)
 state = "() => window.sandLab.state()"
@@ -135,7 +139,7 @@ def exercise_cut_view(tab, *, touch=False):
             "pausedOrbitPixelChange":round(change,3),"resetFromPausedCutView":True}
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(channel="chrome", headless=True, args=[
+    browser = pw.chromium.launch(channel=args.channel, headless=True, args=[
         "--enable-gpu", "--use-angle=d3d11", "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
     ])
@@ -151,7 +155,7 @@ with sync_playwright() as pw:
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda msg: errors.append(f"{msg.text} ({msg.location['url']})") if msg.type == "error" else None)
     page.on("request", lambda req: requests.append(req.url))
-    page.goto(args.url, wait_until="load")
+    page.goto(quarry_url(args.url), wait_until="load")
     page.wait_for_function("window.sandLab && window.sandLab.state().frame>20",timeout=45000)
     graphics=page.evaluate("""() => {const gl=document.querySelector('canvas').getContext('webgl2');
       const d=gl.getExtension('WEBGL_debug_renderer_info'); return d?gl.getParameter(d.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);}""")
@@ -208,7 +212,7 @@ with sync_playwright() as pw:
     desktop_cut=exercise_cut_view(page)
     mobile=browser.new_page(viewport={"width":393,"height":852},device_scale_factor=1,is_mobile=True,has_touch=True)
     mobile.on("pageerror", lambda e:errors.append("mobile: "+str(e)))
-    mobile.goto(args.url)
+    mobile.goto(quarry_url(args.url))
     mobile.wait_for_function("window.sandLab && window.sandLab.state().frame>10")
     assert mobile.locator('[data-action="dig"]').is_visible()
     assert mobile.evaluate("document.documentElement.scrollWidth === innerWidth")
@@ -219,7 +223,7 @@ with sync_playwright() as pw:
     offline_calls=[]
     offline_page.on("request",lambda req: offline_calls.append(req.url) if req.url.startswith(("http:","https:")) else None)
     offline_page.route("http**/*",lambda route:route.abort())
-    offline_page.goto(offline.as_uri())
+    offline_page.goto(quarry_url(offline.as_uri()))
     offline_page.wait_for_function("window.sandLab && window.sandLab.state().frame>10")
     offline_bay_cycles=finish_order(offline_page,2,keyboard=True)
     offline_page.locator("#nextJob").click()
