@@ -313,6 +313,11 @@ export function createQuarry(T, scene) {
 
   // The weigh bay has an open floor: deposited material is always the live grid.
   const { left, right, mouth, back, wall, height } = WEIGH_BAY;
+  const bayGroup = new T.Group();
+  site.add(bayGroup);
+  const bayBatch = batch(T, bayGroup, 'Weigh bay walls', new T.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.91, map: grain,
+  }), true);
   const wallLength = back + wall - mouth;
   const concrete = 0xbdb5a4,
     topStone = 0xd1c9b7,
@@ -323,9 +328,9 @@ export function createQuarry(T, scene) {
   const bayY = height / 2;
   for (const sign of [-1, 1]) {
     const x = sign * (right + wall / 2);
-    box(civil, x, bayY, mouth + wallLength / 2, wall, height, wallLength, concrete);
+    box(bayBatch, x, bayY, mouth + wallLength / 2, wall, height, wallLength, concrete);
     for (const join of [mouth + 1.3, mouth + 2.6]) {
-      box(civil, x, height * 0.49, join, wall + 0.003, height * 0.94, 0.012, joints);
+      box(bayBatch, x, height * 0.49, join, wall + 0.003, height * 0.94, 0.012, joints);
     }
     // Anchor ties along both faces and the nosing markers at the open mouth.
     for (const z of [
@@ -339,23 +344,23 @@ export function createQuarry(T, scene) {
       for (const y of [0.21, 0.55]) {
         const a = vec(x - wall / 2 - 0.002, y, z),
           b = vec(x + wall / 2 + 0.002, y, z);
-        beam(civil, a, b, 0.018, 0.018, joints, true);
+        beam(bayBatch, a, b, 0.018, 0.018, joints, true);
       }
     }
-    box(civil, x, height + 0.009, mouth + 0.27, wall - 0.012, 0.018, 0.52, orange);
+    box(bayBatch, x, height + 0.009, mouth + 0.27, wall - 0.012, 0.018, 0.52, orange);
     for (let k = 0; k < 3; k++)
-      box(civil, x, height + 0.019, mouth + 0.12 + k * 0.15, wall - 0.025, 0.003, 0.055, dark);
-    box(civil, x, 0.405, mouth - 0.008, wall - 0.012, 0.7, 0.016, orange);
-    for (const y of [0.2, 0.48]) box(civil, x, y, mouth - 0.019, wall - 0.022, 0.1, 0.008, dark);
+      box(bayBatch, x, height + 0.019, mouth + 0.12 + k * 0.15, wall - 0.025, 0.003, 0.055, dark);
+    box(bayBatch, x, 0.405, mouth - 0.008, wall - 0.012, 0.7, 0.016, orange);
+    for (const y of [0.2, 0.48]) box(bayBatch, x, y, mouth - 0.019, wall - 0.022, 0.1, 0.008, dark);
     for (const z of [mouth + 0.95, back - 0.48]) {
-      box(civil, x + sign * 0.145, 0.21, z, 0.095, 0.42, 0.3, topStone);
+      box(bayBatch, x + sign * 0.145, 0.21, z, 0.095, 0.42, 0.3, topStone);
     }
   }
-  box(civil, 0, bayY, back + wall / 2, right - left, height, wall, concrete);
+  box(bayBatch, 0, bayY, back + wall / 2, right - left, height, wall, concrete);
   for (const x of [-1.25, -0.63, 0.63, 1.25]) {
     for (const y of [0.2, 0.55])
       beam(
-        civil,
+        bayBatch,
         vec(x, y, back - 0.002),
         vec(x, y, back + wall + 0.002),
         0.017,
@@ -364,8 +369,10 @@ export function createQuarry(T, scene) {
         true,
       );
   }
-  makeSign(T, site, 'WEIGH  BAY', '01', vec(0.0, 0.46, back + wall + 0.013), 0, 0.98, 0.48);
-  makeSign(T, site, 'WEIGH  BAY', '01', vec(0, 0.46, back - 0.013), Math.PI, 0.98, 0.48);
+  makeSign(T, bayGroup, 'WEIGH  BAY', '01', vec(0.0, 0.46, back + wall + 0.013), 0, 0.98, 0.48);
+  makeSign(T, bayGroup, 'WEIGH  BAY', '01', vec(0, 0.46, back - 0.013), Math.PI, 0.98, 0.48);
+
+  bayBatch.finish();
 
   // Feed hopper, rising belt, screen head and finished-aggregate silo.
   const green = 0x4c6864,
@@ -595,7 +602,7 @@ export function createQuarry(T, scene) {
   sunlight.shadow.normalBias = 0.025;
   sunlight.shadow.bias = -0.00028;
   scene.add(ambient, sunlight, sunlight.target);
-  return { root: site, sunlight, bay: WEIGH_BAY };
+  return { root: site, sunlight, bay: WEIGH_BAY, bayGroup };
 }
 
 function makeSign(T, group, caption, number, position, yaw, width, height) {

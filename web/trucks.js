@@ -38,6 +38,7 @@ export function addTruckBeds(core, w) {
       t.floor,
       Math.round(t.order * 64000),
       t.heading,
+      Number(t === fleet[1]),
     );
 }
 
@@ -95,13 +96,13 @@ function buildTruck(t, articulated) {
   b(0.98, 0.81, 0, t.length + 2.25, 0.26, 1.05, graphite);
   const axles = [];
   for (const axle of [-l + 0.51, l - 0.72, hood - 0.3]) {
-    const wheels = new T.Group();
-    wheels.position.set(axle, tyre, 0);
-    root.add(wheels);
-    axles.push(wheels);
-    part(cyl, axle, tyre, 0, dark, 0.16, 2 * w, 0.16, Math.PI / 2, 0, 0, wheels);
+    const hubs = [];
     for (const s of [-1, 1]) {
       const side = s * (w - 0.025);
+      const wheels = new T.Group();
+      wheels.position.set(axle, tyre, side);
+      root.add(wheels);
+      hubs.push(wheels);
       part(cyl, axle, tyre, side, rubber, tyre, 0.34, tyre, Math.PI / 2, 0, 0, wheels);
       part(
         cyl,
@@ -166,6 +167,7 @@ function buildTruck(t, articulated) {
         );
       }
     }
+    axles.push(hubs);
   }
   // A separate open, ribbed steel box with a tailgate, hinges and hoist subframe.
   const bedColor = articulated ? 0xd8ac44 : 0x949e99;
@@ -273,7 +275,7 @@ function buildTruck(t, articulated) {
   for (const [parent, list] of surfaces) {
     const geometry = mergeGeometries(list);
     for (const item of list) item.dispose();
-    if (axles.includes(parent)) geometry.translate(-parent.position.x, -tyre, 0);
+    if (parent !== sprung) geometry.translate(-parent.position.x, -tyre, -parent.position.z);
     const mesh = new T.Mesh(
       geometry,
       new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.66, metalness: 0.19 }),
@@ -315,7 +317,16 @@ function buildTruck(t, articulated) {
   );
   lamp.position.set(cab, 2.48, 0);
   sprung.add(lamp);
-  return { root, sprung, load, lamp, axles, tyre, prior: -1, velocity: 0, settle: 0 };
+  // Three live axle beams and six telescopic dampers share one instanced draw.
+  const links = new T.InstancedMesh(
+    new T.CylinderGeometry(1, 1, 1, 10),
+    new T.MeshStandardMaterial({ color: 0x566061, metalness: 0.5, roughness: 0.55 }),
+    15,
+  );
+  links.frustumCulled = false;
+  links.castShadow = true;
+  root.add(links);
+  return { root, sprung, load, lamp, axles, links, tyre, prior: -1, lastPose: new Float32Array(9) };
 }
 
 export function createFleet(scene) {
@@ -323,19 +334,31 @@ export function createFleet(scene) {
   scene.add(group);
   const trucks = fleet.map((t, i) => buildTruck(t, i === 1));
   for (const t of trucks) group.add(t.root);
+  const start = new T.Vector3(),
+    end = new T.Vector3(),
+    up = new T.Vector3(0, 1, 0);
+  const transform = new T.Object3D(),
+    direction = new T.Vector3();
+  function rod(mesh, slot, a, b, radius) {
+    direction.subVectors(b, a);
+    transform.scale.set(radius, direction.length(), radius);
+    transform.quaternion.setFromUnitVectors(up, direction.normalize());
+    transform.position.copy(a).lerp(b, 0.5);
+    transform.updateMatrix();
+    mesh.setMatrixAt(slot, transform.matrix);
+  }
   return {
     group,
     reset() {
       trucks.forEach((t, i) => {
         t.prior = -1;
-        t.settle = t.velocity = 0;
-        t.sprung.position.y = 0;
+        t.lastPose.fill(Infinity);
         t.root.position.x = fleet[i].x;
-        for (const axle of t.axles) axle.rotation.z = 0;
+
         t.lamp.material.color.setHex(0xe49c40);
       });
     },
-    tick(core, w, dt) {
+    tick(core, w) {
       let changed = false;
       trucks.forEach((truck, i) => {
         const mass = core.world_truck_load(w, i),
@@ -343,7 +366,8 @@ export function createFleet(scene) {
         const travel = core.world_truck_offset(w, i);
         if (truck.root.position.x !== t.x + travel) {
           truck.root.position.x = t.x + travel;
-          for (const axle of truck.axles) axle.rotation.z = (-travel * t.heading) / truck.tyre;
+          for (const axle of truck.axles)
+            for (const hub of axle) hub.rotation.z = (-travel * t.heading) / truck.tyre;
           changed = true;
         }
         if (truck.prior !== mass) {
@@ -376,16 +400,43 @@ export function createFleet(scene) {
           attr.needsUpdate = true;
           truck.load.geometry.computeVertexNormals();
           truck.load.visible = mass > 0;
-          if (truck.prior >= 0) truck.velocity -= (Math.max(0, mass - truck.prior) / 64000) * 0.9;
+
           truck.prior = mass;
           changed = true;
           if (mass >= t.order * 64000) truck.lamp.material.color.setHex(0x76ff92);
         }
-        const target = -Math.min(0.1, (mass / 64000) * 0.046);
-        if (Math.abs(truck.settle - target) + Math.abs(truck.velocity) > 0.00015) {
-          truck.velocity += ((target - truck.settle) * 42 - truck.velocity * 5.5) * dt;
-          truck.settle += truck.velocity * dt;
-          truck.sprung.position.y = truck.settle;
+        const pose = new Float32Array(core.memory.buffer, core.world_truck_pose(w, i), 9);
+        if (truck.lastPose.some((v, j) => Math.abs(v - pose[j]) > 0.000025)) {
+          const pitch = Math.atan(t.heading * pose[1]);
+          truck.sprung.rotation.set(
+            -Math.atan(t.heading * pose[2] * Math.cos(pitch)),
+            0,
+            pitch,
+            'ZXY',
+          );
+          truck.sprung.position.set(0, -t.floor, 0).applyQuaternion(truck.sprung.quaternion);
+          truck.sprung.position.y += t.floor + pose[0];
+          truck.sprung.updateMatrix();
+          for (let axle = 0; axle < 3; axle++) {
+            const hubs = truck.axles[axle];
+            for (let side = 0; side < 2; side++) {
+              const hub = hubs[side].position;
+              hub.y = pose[3 + 2 * axle + (t.heading > 0 ? side : 1 - side)];
+              start
+                .set(hub.x + 0.13, truck.tyre + 0.51, hub.z * 0.65)
+                .applyMatrix4(truck.sprung.matrix);
+              end.set(hub.x, hub.y, hub.z * 0.83);
+              const slot = 3 + axle * 4 + side * 2;
+              rod(truck.links, slot, start, end, 0.044);
+              end.lerp(start, 0.43);
+              rod(truck.links, slot + 1, start, end, 0.076);
+            }
+            const axleRoll = -Math.atan2(hubs[1].position.y - hubs[0].position.y, t.width - 0.05);
+            for (const hub of hubs) hub.rotation.x = axleRoll;
+            rod(truck.links, axle, hubs[0].position, hubs[1].position, 0.116);
+          }
+          truck.links.instanceMatrix.needsUpdate = true;
+          truck.lastPose.set(pose);
           changed = true;
         }
       });

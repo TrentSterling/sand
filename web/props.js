@@ -181,6 +181,9 @@ export function createLooseProps(scene, exit) {
     return true;
   }
   return {
+    rebaseColliders() {
+      initialized = false;
+    },
     get hits() {
       return hits;
     },

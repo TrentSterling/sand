@@ -1,6 +1,6 @@
 import { escapeYard, onDeck, deckTop } from './escape.js';
 import { WEIGH_BAY } from './quarry.js';
-import { fleet } from './trucks.js';
+import { truckHulls, reactTruck, truckRevision } from './truck-contact.js';
 
 // Read the same cell-centred triangles the terrain renderer uploads. The
 // collider needs height and gradient together for each rigid shoe contact.
@@ -69,42 +69,11 @@ const escapeWalls = [
     true,
   ],
 ];
-const haulWalls = [...walls];
-const truckSegments = [];
-for (const t of fleet) {
-  const start = haulWalls.length;
-  const l = t.length / 2,
-    w = t.width / 2,
-    floor = t.floor;
-  haulWalls.push([t.x - l, t.x + l, t.z - w, t.z + w, floor]);
-  for (const s of [-1, 1]) {
-    haulWalls.push([
-      t.x - l - 0.06,
-      t.x + l + 0.06,
-      t.z + s * w - 0.09,
-      t.z + s * w + 0.09,
-      floor + 0.75,
-    ]);
-    haulWalls.push([t.x + s * l - 0.09, t.x + s * l + 0.09, t.z - w, t.z + w, floor + 0.75]);
-  }
-  const cab = t.x + t.heading * (l + (t === fleet[1] ? 1.36 : 0.85));
-  haulWalls.push([cab - 0.59, cab + 0.59, t.z - 0.78, t.z + 0.78, 2.35]);
-  const hood = cab + t.heading * 1.15;
-  haulWalls.push([hood - 0.65, hood + 0.65, t.z - 0.78, t.z + 0.78, 1.65]);
-  truckSegments.push(
-    haulWalls.slice(start).map((wall) => ({ wall, left: wall[0], right: wall[1] })),
-  );
-}
-export function positionTruckWalls(core, w) {
-  truckSegments.forEach((segments, i) => {
-    const dx = core.world_truck_offset(w, i);
-    for (const segment of segments) {
-      segment.wall[0] = segment.left + dx;
-      segment.wall[1] = segment.right + dx;
-    }
-  });
-}
-export const haulClearance = (x, y, z, n) => yardClearance(x, y, z, n, haulWalls);
+const emptyYard = [];
+export const haulClearance = (x, y, z, n) => yardClearance(x, y, z, n, emptyYard);
+haulClearance.hulls = truckHulls;
+haulClearance.react = reactTruck;
+haulClearance.revision = truckRevision;
 export function yardClearance(x, y, z, n, obstacles = walls) {
   // Low perimeter stops constrain the crawlers while leaving the elevated
   // attachment free to overhang the edge of the playable yard.

@@ -44,9 +44,17 @@ Open **Help → Quarry orders** for the original yard. The first order weighs 0.
 
 ## Driving the crawler
 
+If the machine gets wedged, open **Jobs / Help → Recover excavator**. It returns the excavator to the starting pad with its bucket load, delivered sand, excavated terrain and current job intact. The truck-loading yard has an open apron where the quarry orders use a concrete weigh bay.
+
 Raise the boom with **W**, drive up the bank with **↑**, release to brake, then slew with **Q**. The 20.4 t carrier carries its velocity into the stop. The house, counterweight, boom, stick, bucket and payload determine how the two tracks share its weight. A heaped bucket adds 880 kg at the attachment. The raised arm can rock the chassis, and pressing the bucket into hard ground can lift weight off the tracks.
 
 Each track drives and brakes independently. Loaded shoes compress loose sand and can push material sideways into ruts. The CPU integrates the chassis at 120 Hz and the soil at 60 Hz. The machine uses a rigid undercarriage, a prescribed hydraulic linkage and a dry granular heightfield. The masses, drive characteristics and soil coefficients are game calibrations. [Physics source](web/crawler.js) · [Crest films and six matched views](https://tront.xyz/sand/review/drive/) · [Drive test measurements](evidence/drive.json)
+
+### Haul truck suspension
+
+Each truck carries six wheel masses on springs and dampers. At 240 Hz the CPU samples the live sand under each tyre, transfers load through the rear tandem and integrates chassis heave, pitch and roll. The position of sand in the bed affects which springs compress. The bed, cab, axle beams, dampers and wheel collision shapes follow the simulated pose. The dispatch driver brakes for an occupied lane and continues when it clears. In **CPU lab**, the truck springs row shows left and right compression in millimetres for each axle. [Watch a loaded departure](evidence/loaded-suspension.webp) · [Suspension source](src/suspension.rs)
+
+The handling is tuned for two fictional trucks on straight dispatch routes. CrumpleCar informed the loaded-tyre contact and bump-stop design, Dunes informed the per-wheel terrain sampling and rebound, and Jet Game informed the hub-to-shock visual linkage. A two-tonne off-centre load in the test rig lowered Cherry Picker's bed centre by 62 mm and Mule Six's by 60 mm. The collision checks drive the crawler into the side, cab and tail, reverse clear and block a departing truck until the lane opens. [Truck contact measurements](evidence/truck-contact.json)
 
 ## What moves the sand
 
@@ -95,6 +103,7 @@ cargo run --locked --release --bin bench
 node tools/verify-machine.mjs
 node tools/verify-controls.mjs
 node tools/verify-drive.mjs
+node tools/verify-truck-contact.mjs
 node tools/stress-dunes.mjs
 ```
 
@@ -103,3 +112,5 @@ For browser verification, install Python Playwright and its Chromium browser. Ru
 Run `python tools/playtest.py --channel chromium` to complete both quarry orders, compare the solvers and open the downloaded build with network requests blocked. Run `python tools/drive-playtest.py` with Chrome for the keyboard crest test. Run `python tools/inspect-machine.py` for the orthographic model review.
 
 Run `python tools/escape-playtest.py --drive-through` to hold the throttle through the gate and check the win on the far side. Run `python tools/yard-playtest.py` to load and dispatch both trucks with the on-screen controls, dig in the dunes, measure 240 frames and check the stress replay. Both scripts accept `--browser firefox` and `--url` for testing the published game.
+
+Run `python tools/haul-recovery.py` to drive into a parked truck with a loaded bucket, recover the excavator and finish that delivery.

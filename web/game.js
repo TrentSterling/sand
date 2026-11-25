@@ -4,13 +4,14 @@ import { carrierClearance, createMachine, machineDimensions } from './machine.js
 import { armIK, forward, toolAttitude } from './arm.js';
 import { createExit, escapeYard, newEscapeWorld, parkOnDeck } from './escape.js';
 import { createCrawler } from './crawler.js';
+import { driveGround, yardClearance, escapeClearance, haulClearance } from './drive-ground.js';
 import {
-  driveGround,
-  yardClearance,
-  escapeClearance,
-  haulClearance,
   positionTruckWalls,
-} from './drive-ground.js';
+  truckHulls,
+  clearTruckReactions,
+  checkDispatchLane,
+  truckInputs,
+} from './truck-contact.js';
 import { fleet, createFleet, addTruckBeds } from './trucks.js';
 import { createLooseProps } from './props.js';
 import { createContactView } from './contact-view.js';
@@ -77,7 +78,7 @@ async function start() {
   controls.maxPolarAngle = Math.PI * 0.484;
   controls.minPolarAngle = 0.13;
   controls.enablePan = false;
-  createQuarry(THREE, scene);
+  const quarry = createQuarry(THREE, scene);
   const terrain = createGround(scene),
     stream = createStream(scene),
     rig = createMachine(THREE),
@@ -110,7 +111,7 @@ async function start() {
   function createWorld(dense) {
     if (escapeMode) return newEscapeWorld(core, dense);
     if (yard === 'dunes') return core.dunes_new(dense);
-    const handle = core.world_new(dense);
+    const handle = yard === 'haul' ? core.haul_new(dense) : core.world_new(dense);
     if (yard === 'haul') addTruckBeds(core, handle);
     return handle;
   }
@@ -197,17 +198,24 @@ async function start() {
     if (old.boom === p.boom && old.stick === p.stick && old.curl === p.curl && old.yaw === p.yaw)
       return;
     contactStop = false;
-    const margin = carrierClearance(p);
-    if (margin >= 0 || margin >= carrierClearance(old)) return;
+    const clearance = (pose) =>
+      yard === 'haul'
+        ? Math.min(
+            carrierClearance(pose),
+            truckHulls(pose, chassis.position, chassis.rotation, null, 0.015),
+          )
+        : carrierClearance(pose);
+    const margin = clearance(p);
+    if (margin >= 0 || margin >= clearance(old)) return;
     const goal = { ...p };
     let good = 0,
       bad = 1;
-    const floor = Math.min(0, carrierClearance(old));
+    const floor = Math.min(0, clearance(old));
     for (let i = 0; i < 9; i++) {
       const t = (good + bad) / 2;
       for (const joint of ['boom', 'stick', 'curl', 'yaw'])
         p[joint] = mix(old[joint], goal[joint], t);
-      if (carrierClearance(p) >= floor) good = t;
+      if (clearance(p) >= floor) good = t;
       else bad = t;
     }
     for (const joint of ['boom', 'stick', 'curl', 'yaw'])
@@ -249,6 +257,21 @@ async function start() {
     pointerHeld = new Map();
   const replay = new Float32Array(5 * 3600);
   const shoeEvents = Array(3600).fill(null);
+  const recoverFrames = new Set();
+  const truckEvents = Array(3600).fill(null);
+  function applyTruckInputs(handle, events) {
+    for (let i = 0; i < fleet.length; i++) {
+      const offset = i * 4;
+      core.world_truck_contact(
+        handle,
+        i,
+        events?.[offset] ?? 0,
+        events?.[offset + 1] ?? 0,
+        events?.[offset + 2] ?? 0,
+        events?.[offset + 3] ?? 0,
+      );
+    }
+  }
   let drove = false;
   let trackMoved = false;
   const source = { x: 5.45, z: -0.15 },
@@ -389,13 +412,16 @@ async function start() {
       trucks.group.visible = yard === 'haul';
       trucks.reset();
     }
+    quarry.bayGroup.visible = yard !== 'haul';
     exit.group.visible = escapeMode;
     exit.reset();
     yardProps.reset(ground);
     deckReached = false;
     terrain.reset(escapeMode);
     sampleDrive = driveGround(core, w, escapeMode);
+    recoverFrames.clear();
     shoeEvents.fill(null);
+    truckEvents.fill(null);
     drove = false;
     base = { x: 0, y: 0, z: 0 };
     trackYaw = 0;
@@ -887,6 +913,7 @@ async function start() {
       driveInput = steerInput = 0;
     }
     if (driveInput || steerInput) startRun();
+    if (yard === 'haul') clearTruckReactions();
     chassis.step(
       p,
       core.world_load(w) / units,
@@ -913,6 +940,23 @@ async function start() {
       }
       if (events) shoeEvents[frame] = new Float32Array(events);
     }
+    if (yard === 'haul') {
+      let events = null;
+      for (let i = 0; i < fleet.length; i++) {
+        if (
+          core.world_truck_load(w, i) >= fleet[i].order * units &&
+          Math.abs(truckOffsets[i]) < 5.79
+        )
+          checkDispatchLane(p, chassis.position, chassis.rotation, i);
+        const input = truckInputs(i);
+        if (input[0] || input[3]) {
+          events ??= new Float32Array(fleet.length * 4);
+          events.set(input, i * 4);
+        }
+      }
+      applyTruckInputs(w, events);
+      if (frame < 3600) truckEvents[frame] = events;
+    }
     core.world_tool(w, tip.x, tip.y, tip.z, yaw, pitch);
     core.world_tick(w);
     const gateWasBroken = yardProps.broken,
@@ -935,7 +979,7 @@ async function start() {
       note('Gate inspection complete. Replacement required.');
       playSignal('snap');
     } else if (yardProps.hits > oldHits) playSignal('clonk');
-    if (yard === 'haul' && trucks.tick(core, w, step)) {
+    if (yard === 'haul' && trucks.tick(core, w)) {
       positionTruckWalls(core, w);
       renderer.shadowMap.needsUpdate = true;
     }
@@ -1079,6 +1123,19 @@ async function start() {
       byId('chassisTime').textContent = (chassisMs / Math.max(1, renderTicks)).toFixed(3) + ' ms';
       byId('travelSpeed').textContent = (body.speed * 3.6).toFixed(1) + ' km/h';
       byId('machineMass').textContent = (body.massKg / 1000).toFixed(2) + ' t';
+      byId('truckSpringRow').hidden = yard !== 'haul';
+      if (yard === 'haul') {
+        const i = Math.min(job, 1),
+          t = fleet[i];
+        const pose = new Float32Array(core.memory.buffer, core.world_truck_pose(w, i), 21);
+        const pairs = [2, 1, 0].map((axle) => {
+          const j = 9 + axle * 2;
+          return [t.heading > 0 ? j : j + 1, t.heading > 0 ? j + 1 : j]
+            .map((k) => Math.round(pose[k] * 1000))
+            .join('/');
+        });
+        byId('truckSprings').textContent = pairs.join(' ? ') + ' mm';
+      }
       byId('draws').textContent = String(renderer.info.render.calls);
     }
     byId('fps').textContent = Math.round(fps) + ' fps';
@@ -1147,6 +1204,8 @@ async function start() {
           for (let f = i; f < end; f++) {
             if (actual) {
               const j = f * 5;
+              if (recoverFrames.has(f)) core.world_recover_tool(handle);
+              if (yard === 'haul') applyTruckInputs(handle, truckEvents[f]);
               const events = shoeEvents[f];
               if (events)
                 for (let n = 0; n < events.length; n += 6) {
@@ -1425,6 +1484,31 @@ async function start() {
       hud();
     }
   };
+  byId('recover').onclick = () => {
+    if (busy) return;
+    setManual(manual);
+    p = { ...armIK(4.9, 3.4, 0.48), yaw: 0 };
+    let height = ground(0, 0);
+    for (const x of [-2, -1, 0, 1, 2])
+      for (const z of [-1.3, -1, 1, 1.3]) height = Math.max(height, ground(x, z));
+    chassis.reset(p, core.world_load(w) / units, 0, height + 0.03, 0);
+    core.world_recover_tool(w);
+    yardProps.rebaseColliders();
+    if (frame < 3600) recoverFrames.add(frame);
+    driveInput = steerInput = slewRate = 0;
+    brakingOnDeck = false;
+    parkTicks = stallTicks = 0;
+    deckReached = false;
+    stallSide = '';
+    exit.clearMarks();
+    if (escapeMode && !done) byId('missionBrief').textContent = brief;
+    previousJointState = [];
+    updateMachine();
+    byId('help').hidden = true;
+    byId('helpToggle').setAttribute('aria-expanded', 'false');
+    setPause(false);
+    note('Back on the starting pad. Your load and job progress are saved for this run.');
+  };
   byId('reset').onclick = reset;
   byId('nextJob').onclick = nextJob;
   byId('audio').onclick = audioToggle;
@@ -1531,6 +1615,14 @@ async function start() {
       propHits: yardProps.hits,
       initialM3: core.world_initial_m3(w),
       truckLoads: yard === 'haul' ? fleet.map((_, i) => core.world_truck_load(w, i)) : [],
+      truckSuspension:
+        yard === 'haul'
+          ? fleet.map((_, i) =>
+              Array.from(new Float32Array(core.memory.buffer, core.world_truck_pose(w, i), 21)),
+            )
+          : [],
+      truckClearance:
+        yard === 'haul' ? truckHulls(p, chassis.position, chassis.rotation, null, 0.5) : null,
       truckTravel: yard === 'haul' ? fleet.map((_, i) => core.world_truck_offset(w, i)) : [],
       scoops,
       finishTime,

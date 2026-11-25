@@ -1,5 +1,6 @@
 //! Fixed-step dry sand in integer height units. One unit is 1 mm over a 125 mm square.
 mod haul;
+mod suspension;
 use haul::TruckBed;
 
 pub const N: usize = 256;
@@ -589,7 +590,23 @@ impl World {
             }
         }
         for bed in &mut self.beds {
-            bed.drive();
+            bed.step(|x, z| {
+                let gx = ((x + 16.) * 8. - 0.5).clamp(0., 254.999);
+                let gz = ((z + 16.) * 8. - 0.5).clamp(0., 254.999);
+                let i = gz as usize * N + gx as usize;
+                let h = |i: usize| {
+                    (self.base[i] + self.height[i]
+                        - ((self.height[i] * self.compact[i] as i32) >> 11))
+                        as f32
+                        * 0.001
+                };
+                let (u, v) = (gx.fract(), gz.fract());
+                if u + v <= 1. {
+                    (1. - u - v) * h(i) + u * h(i + 1) + v * h(i + N)
+                } else {
+                    (u + v - 1.) * h(i + N + 1) + (1. - u) * h(i + N) + (1. - v) * h(i + 1)
+                }
+            });
         }
         let mut k = 0;
         while k < self.air.len() {
@@ -732,6 +749,26 @@ pub extern "C" fn dune_stress_step(w: &mut World, frame: u32) {
     w.tick();
 }
 #[no_mangle]
+pub extern "C" fn haul_new(dense: i32) -> *mut World {
+    let mut world = World::new(dense != 0);
+    world.base.fill(0);
+    world.in_bay.fill(false);
+    // Shallow spillage on the dispatch lanes gives each tandem a real, editable bump.
+    for z in 0..N {
+        for x in 0..N {
+            let (wx, wz) = (coord(x), coord(z));
+            for (cx, cz) in [(3.85, -4.60), (-9.65, 2.41)] {
+                let ridge = (1. - ((wx - cx) / 0.74).powi(2) - ((wz - cz) / 0.63).powi(2)).max(0.);
+                let units = (175. * ridge) as i32;
+                world.height[z * N + x] += units;
+                world.initial += i64::from(units);
+            }
+        }
+    }
+    Box::into_raw(Box::new(world))
+}
+
+#[no_mangle]
 pub extern "C" fn world_add_truck(
     w: &mut World,
     x: f32,
@@ -741,9 +778,33 @@ pub extern "C" fn world_add_truck(
     floor: f32,
     order: i32,
     heading: f32,
+    offroad: u32,
 ) {
-    w.beds
-        .push(TruckBed::new(x, z, half_x, half_z, floor, order, heading));
+    w.beds.push(TruckBed::new(
+        [x, z],
+        [half_x, half_z],
+        floor,
+        order,
+        heading,
+        offroad != 0,
+    ));
+}
+#[no_mangle]
+pub extern "C" fn world_truck_pose(w: &World, index: usize) -> *const f32 {
+    w.beds[index].suspension.state.as_ptr()
+}
+#[no_mangle]
+pub extern "C" fn world_truck_contact(
+    w: &mut World,
+    index: usize,
+    load: f32,
+    mx: f32,
+    mz: f32,
+    blocked: u32,
+) {
+    let bed = &mut w.beds[index];
+    bed.external = [load, mx, mz];
+    bed.blocked = blocked != 0;
 }
 #[no_mangle]
 pub extern "C" fn world_truck_offset(w: &World, index: usize) -> f32 {
@@ -775,6 +836,12 @@ pub extern "C" fn world_tick(w: &mut World) {
 #[no_mangle]
 pub extern "C" fn world_tool(w: &mut World, x: f32, y: f32, z: f32, yaw: f32, pitch: f32) {
     w.tool(x, y, z, yaw, pitch)
+}
+#[no_mangle]
+pub extern "C" fn world_recover_tool(w: &mut World) {
+    w.last_tool = None;
+    w.tip_velocity = None;
+    w.tip_accel = [0.; 2];
 }
 #[no_mangle]
 pub extern "C" fn world_ground(w: &World, x: f32, z: f32) -> f32 {
@@ -884,6 +951,10 @@ pub extern "C" fn world_hash(w: &World) -> u32 {
     }
     for bed in &w.beds {
         h = (h ^ bed.dispatch_ticks).wrapping_mul(16777619);
+        for &value in &bed.suspension.state {
+            h = (h ^ value.to_bits()).wrapping_mul(16777619);
+        }
+        h = (h ^ bed.offset.to_bits()).wrapping_mul(16777619);
         for &v in &bed.bins {
             h = (h ^ v as u32).wrapping_mul(16777619);
         }
@@ -940,7 +1011,7 @@ mod tests {
     #[test]
     fn truck_counts_impacts_inside_its_bed_and_carries_its_payload_away() {
         let mut w = World::new(false);
-        world_add_truck(&mut w, -5., -5., 1.5, 1., 1.35, 900, 1.);
+        world_add_truck(&mut w, -5., -5., 1.5, 1., 1.35, 900, 1., 0);
         for (x, y, z, mass) in [
             (-5., 3., -5., 1100),
             (-5., 3., -3.4, 700),

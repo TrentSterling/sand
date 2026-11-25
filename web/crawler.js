@@ -52,6 +52,7 @@ export function createCrawler() {
     const pad = {
       local: new Vector3(x, y, z),
       rate: vec(),
+      motion: vec(),
       world: vec(),
       r: vec(),
       n: constraint(),
@@ -70,7 +71,7 @@ export function createCrawler() {
       forwardMu: 0,
       lateralMu: 0,
     };
-    contacts.push(pad);
+    if (kind !== 'truck') contacts.push(pad);
     return pad;
   }
   for (const side of [-1, 1]) {
@@ -104,6 +105,26 @@ export function createCrawler() {
         const offset = link === 'boom' ? Math.sin(t * Math.PI) * 0.34 + edge * 0.22 : edge * 0.16;
         armPads.push({ link, x: length * t, y: offset, point: addContact(0, 0, 0, 0, 'steel') });
       }
+  const hullRows = Array.from({ length: 14 }, () => addContact(0, 0, 0, 0, 'truck'));
+  let touchingTruck = false, lastTruckRevision = -1;
+  function truckRow(index, gap, point, axis, owner) {
+    touchingTruck = true;
+    const pad = hullRows[index];
+    pad.owner = owner;
+    pad.world.copy(point);
+    pad.r.subVectors(point, comWorld);
+    prepare(pad.n, pad.r, axis);
+    lateral.copy(fwd).addScaledVector(axis, -fwd.dot(axis));
+    if (lateral.lengthSq() < 0.01) lateral.set(0, 0, 1).addScaledVector(axis, -axis.z);
+    lateral.normalize();
+    prepare(pad.t, pad.r, lateral);
+    prepare(pad.l, pad.r, b.crossVectors(lateral, axis).normalize());
+    pad.n.impulse = pad.t.impulse = pad.l.impulse = 0;
+    pad.bias = gap > 0 ? -gap / dt : Math.min(2.0, (Math.max(0, -gap - 0.001) * 0.22) / dt);
+    pad.softness = 0.001;
+    pad.forwardMu = pad.lateralMu = 0.25;
+    active.push(pad);
+  }
   const patches = contacts.filter((p) => p.side);
   const active = [];
   const belt = [0, 0],
@@ -277,8 +298,7 @@ export function createCrawler() {
     apply(row, next - row.impulse);
     row.impulse = next;
   }
-  for (const pad of contacts) pad.motion = vec();
-  function substep(sample, obstacle, turning) {
+  function substep(sample, obstacle, turning, p) {
     orient.setFromMatrix4(rotMatrix.makeRotationFromQuaternion(rotation));
     inverse.multiplyMatrices(orient, inertia).multiply(transpose.copy(orient).transpose());
     relativeWorld.copy(relativeMomentum).applyQuaternion(rotation);
@@ -361,6 +381,7 @@ export function createCrawler() {
       if (pad.side) thrust[pad.side > 0 ? 1 : 0] += prevT;
       active.push(pad);
     }
+    if (obstacle?.hulls) obstacle.hulls(p, position, rotation, truckRow);
     for (let pass = 0; pass < rows; pass++) {
       for (let k = 0; k < active.length; k++) {
         const pad = active[(pass + parity) % 2 ? k : active.length - 1 - k];
@@ -396,6 +417,7 @@ export function createCrawler() {
       const f = velocity.dot(pad.t.axis) + omega.dot(pad.t.moment) + pad.motion.dot(pad.t.axis);
       const l = velocity.dot(pad.l.axis) + omega.dot(pad.l.moment) + pad.motion.dot(pad.l.axis);
       pad.slip = Math.hypot(pad.belt - f, l);
+      if (pad.kind === 'truck') obstacle.react(pad.owner, pad.world, pad.n.axis, pad.normalLoad);
       if (pad.kind === 'bucket') toolForce += pad.normalLoad;
       if (pad.side && pad.normalLoad > 0.05) {
         normalBySide[pad.side > 0 ? 1 : 0] += pad.normalLoad;
@@ -463,9 +485,11 @@ export function createCrawler() {
           break;
         }
       }
-      if (same) return;
+      if (same && (!obstacle?.hulls || (!touchingTruck && lastTruckRevision === obstacle.revision()))) return;
     }
     sleeping = false;
+    touchingTruck = false;
+    if (obstacle?.hulls) lastTruckRevision = obstacle.revision();
     massProperties(p, load);
     lastPose[0] = p.boom;
     lastPose[1] = p.stick;
@@ -482,7 +506,7 @@ export function createCrawler() {
       belt[i] = approach(belt[i], target, (target ? 1.55 : 2.7) / 60);
       odometer[i] += belt[i] / 60;
     }
-    for (let i = 0; i < 2; i++) substep(sample, obstacle, Math.abs(belt[0] - belt[1]) > 0.1);
+    for (let i = 0; i < 2; i++) substep(sample, obstacle, Math.abs(belt[0] - belt[1]) > 0.1, p);
     angles.setFromQuaternion(rotation, 'YXZ');
     bodyYaw = angles.y;
     actualSpeed = velocity.dot(fwd);
