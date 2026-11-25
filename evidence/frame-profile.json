@@ -1,0 +1,533 @@
+{
+  "versions": [
+    "0.6.0",
+    "0.6.1"
+  ],
+  "browser": "147.0.7727.15",
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "viewport": [
+    1280,
+    800
+  ],
+  "method": "Two paired runs of the standalone HTML with normal game rendering, scripted inputs, a fixed display clock and one callback per browser repaint. CPU times cover the game animation callback and WebGL submission. GPU execution time is outside that timer. Buffer metrics count WebGL bufferSubData calls and bytes across the scene. Screenshot capture is outside the timed samples.",
+  "workloads": {
+    "quarry-rest": {
+      "frames": 90,
+      "bufferUploads": [
+        0,
+        0
+      ],
+      "bufferBytes": [
+        0,
+        0
+      ],
+      "drawCalls": [
+        5220,
+        0
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 0.55,
+            "cpuP95Ms": 0.7
+          },
+          "after": {
+            "cpuMedianMs": 0.1,
+            "cpuP95Ms": 0.2
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 0.7,
+            "cpuP95Ms": 0.9
+          },
+          "after": {
+            "cpuMedianMs": 0.1,
+            "cpuP95Ms": 0.2
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "quarry-dig": {
+      "frames": 175,
+      "bufferUploads": [
+        3471,
+        113
+      ],
+      "bufferBytes": [
+        2344200,
+        1220048
+      ],
+      "drawCalls": [
+        14422,
+        11046
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 1,
+            "cpuP95Ms": 1.6
+          },
+          "after": {
+            "cpuMedianMs": 1.1,
+            "cpuP95Ms": 1.8
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.7
+          },
+          "after": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.6
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "quarry-pour": {
+      "frames": 55,
+      "bufferUploads": [
+        1242,
+        427
+      ],
+      "bufferBytes": [
+        567064,
+        375772
+      ],
+      "drawCalls": [
+        5390,
+        5390
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 1.1,
+            "cpuP95Ms": 1.4
+          },
+          "after": {
+            "cpuMedianMs": 1.3,
+            "cpuP95Ms": 1.8
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.7
+          },
+          "after": {
+            "cpuMedianMs": 1.1,
+            "cpuP95Ms": 1.6
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "quarry-settle": {
+      "frames": 140,
+      "bufferUploads": [
+        3724,
+        555
+      ],
+      "bufferBytes": [
+        2149216,
+        1373575
+      ],
+      "drawCalls": [
+        10142,
+        6140
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 0.6,
+            "cpuP95Ms": 1.3
+          },
+          "after": {
+            "cpuMedianMs": 0.5,
+            "cpuP95Ms": 1.4
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 0.7,
+            "cpuP95Ms": 1.4
+          },
+          "after": {
+            "cpuMedianMs": 0.5,
+            "cpuP95Ms": 1.4
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "haul-rest": {
+      "frames": 90,
+      "bufferUploads": [
+        39,
+        39
+      ],
+      "bufferBytes": [
+        37440,
+        37440
+      ],
+      "drawCalls": [
+        9480,
+        6400
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 1.05,
+            "cpuP95Ms": 1.4
+          },
+          "after": {
+            "cpuMedianMs": 0.9,
+            "cpuP95Ms": 1.6
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 0.85,
+            "cpuP95Ms": 1.6
+          },
+          "after": {
+            "cpuMedianMs": 0.9,
+            "cpuP95Ms": 1.4
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "haul-dig": {
+      "frames": 175,
+      "bufferUploads": [
+        3474,
+        116
+      ],
+      "bufferBytes": [
+        2347080,
+        1222624
+      ],
+      "drawCalls": [
+        19502,
+        15024
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.8
+          },
+          "after": {
+            "cpuMedianMs": 1.3,
+            "cpuP95Ms": 1.9
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.9
+          },
+          "after": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.7
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "haul-pour": {
+      "frames": 55,
+      "bufferUploads": [
+        889,
+        430
+      ],
+      "bufferBytes": [
+        598324,
+        514712
+      ],
+      "drawCalls": [
+        7274,
+        7274
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 1.3,
+            "cpuP95Ms": 3.6
+          },
+          "after": {
+            "cpuMedianMs": 1.3,
+            "cpuP95Ms": 1.9
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 1.5,
+            "cpuP95Ms": 2
+          },
+          "after": {
+            "cpuMedianMs": 1.3,
+            "cpuP95Ms": 2.1
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "haul-settle": {
+      "frames": 140,
+      "bufferUploads": [
+        3390,
+        644
+      ],
+      "bufferBytes": [
+        2285788,
+        1874304
+      ],
+      "drawCalls": [
+        15863,
+        13835
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.6
+          },
+          "after": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.7
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 1.3,
+            "cpuP95Ms": 1.8
+          },
+          "after": {
+            "cpuMedianMs": 1.2,
+            "cpuP95Ms": 1.6
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "dunes-rest": {
+      "frames": 90,
+      "bufferUploads": [
+        14322,
+        5949
+      ],
+      "bufferBytes": [
+        92590286,
+        47449728
+      ],
+      "drawCalls": [
+        7380,
+        5640
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 2.25,
+            "cpuP95Ms": 3
+          },
+          "after": {
+            "cpuMedianMs": 1.8,
+            "cpuP95Ms": 2.5
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 2.2,
+            "cpuP95Ms": 2.8
+          },
+          "after": {
+            "cpuMedianMs": 1.6,
+            "cpuP95Ms": 2.3
+          }
+        }
+      ],
+      "sameGameplayState": true
+    },
+    "dunes-drive": {
+      "frames": 225,
+      "bufferUploads": [
+        77140,
+        17727
+      ],
+      "bufferBytes": [
+        225732062,
+        106916473
+      ],
+      "drawCalls": [
+        19187,
+        15656
+      ],
+      "timings": [
+        {
+          "before": {
+            "cpuMedianMs": 2.4,
+            "cpuP95Ms": 4.6
+          },
+          "after": {
+            "cpuMedianMs": 1.9,
+            "cpuP95Ms": 3.1
+          }
+        },
+        {
+          "before": {
+            "cpuMedianMs": 2.4,
+            "cpuP95Ms": 3.5
+          },
+          "after": {
+            "cpuMedianMs": 1.8,
+            "cpuP95Ms": 2.7
+          }
+        }
+      ],
+      "sameGameplayState": true
+    }
+  },
+  "images": [
+    {
+      "quarry-rest.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "quarry-dig.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "quarry-pour.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "quarry-settle.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "haul-rest.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "haul-dig.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "haul-pour.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "haul-settle.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "dunes-rest.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "dunes-drive.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    {
+      "quarry-rest.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "quarry-dig.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "quarry-pour.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "quarry-settle.png": {
+        "changedPixels": 99,
+        "maxChannelDelta": 1
+      },
+      "haul-rest.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "haul-dig.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "haul-pour.png": {
+        "changedPixels": 1,
+        "maxChannelDelta": 1
+      },
+      "haul-settle.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "dunes-rest.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      },
+      "dunes-drive.png": {
+        "changedPixels": 0,
+        "maxChannelDelta": 0
+      }
+    }
+  ],
+  "stress": {
+    "before": {
+      "runtime": "v24.22.1",
+      "initialSandM3": 2062.315875,
+      "representedSandTonnes": 3299.7054,
+      "grid": [
+        256,
+        256
+      ],
+      "ticks": 900,
+      "landslides": 15,
+      "repeats": 7,
+      "batchTicks": 30,
+      "active": {
+        "medianReplayMs": 101.064,
+        "p95BatchMs": 4.503,
+        "pairs": 23656496
+      },
+      "dense": {
+        "medianReplayMs": 112.057,
+        "p95BatchMs": 4.672,
+        "pairs": 29376000
+      },
+      "hash": "9057c33d",
+      "massError": 0
+    },
+    "after": {
+      "runtime": "v24.22.1",
+      "initialSandM3": 2062.315875,
+      "representedSandTonnes": 3299.7054,
+      "grid": [
+        256,
+        256
+      ],
+      "ticks": 900,
+      "landslides": 15,
+      "repeats": 7,
+      "batchTicks": 30,
+      "active": {
+        "medianReplayMs": 87.797,
+        "p95BatchMs": 4.12,
+        "pairs": 23656496
+      },
+      "dense": {
+        "medianReplayMs": 94.068,
+        "p95BatchMs": 4.202,
+        "pairs": 29376000
+      },
+      "hash": "9057c33d",
+      "massError": 0
+    }
+  }
+}

@@ -60,13 +60,17 @@ The handling is tuned for two fictional trucks on straight dispatch routes. Crum
 
 The Rust core owns a 32 × 32 m yard at 125 mm spacing. Columns store integer quantities of dry sand plus compaction. A curl or inward stroke loads the bucket to a heaped capacity of 0.55 m³. Once full, the blade moves soil sideways across both cheeks. The bucket retains its load through steady transport. Tipping or accelerating it can release material. A parcel's mass, velocity and impact location drive the visible discharge and the resulting deposit. A darker cut face shows where the teeth removed the original bank. Each column has one surface, so a persistent overhang would need a different representation.
 
-The solver advances at 60 fixed steps per second on one CPU thread. Four alternating disjoint-neighbor passes cover both grid axes. A 16 × 16 tile wakes when material changes and stays awake long enough to cover the neighboring pairs. The renderer uploads only the affected position and normal ranges and reuses its shadow map while the machine and ground are still. WebGL2 draws the result. No compute shaders are required.
+The solver advances at 60 fixed steps per second on one CPU thread. Four alternating disjoint-neighbor passes cover both grid axes. A 16 × 16 tile wakes when material changes and stays awake long enough to cover the neighboring pairs. Sand transfers and track pressure update the compacted surface height for each affected column. The renderer keeps the grid coordinates on the GPU and uploads changed heights, normals and packing in tile order. Once the quarry settles, the browser keeps the last image on screen while input and physics continue to run.
 
 ### Measure a dig
 
+On the 225-frame dune drive at 1280 × 800, version 0.6.1 reduced WebGL buffer traffic from 226 MB to 107 MB and buffer uploads from 77,140 to 17,727. Both versions used the same mesh, shadows, resolution and input sequence. The comparison also covers quarry cuts, airborne sand, truck loading, and waking a parked view. [Frame measurements](evidence/frame-profile.json)
+
+The CPU solver now spends 256 KiB per world caching compacted surface heights. In seven WebAssembly runs of the 900-tick dune stress test, the active-tile median fell from 101.1 ms to 87.8 ms. Both releases visited 23,656,496 pairs, conserved all the sand, and ended with the same material hash.
+
 The lab compares the first minute of your recorded tool and drive inputs, a repeatable reference dig, or a quarry-wide avalanche. Both schedulers start from the same initial conditions. The panel reports elapsed simulation time, pair visits, mass balance and whether the final material-state hashes agree. The avalanche keeps much more of the yard active and gives a different performance comparison.
 
-On an Intel Core Ultra 9 285K under Windows, 21 paired repetitions of the 720-tick reference dig gave the following results. Times cover the complete native replay loop. World creation, rendering, and validation are outside the timer. [Native benchmark receipt](evidence/native.json)
+The original native benchmark on an Intel Core Ultra 9 285K under Windows used 21 paired repetitions of the 720-tick reference dig. Times cover the complete replay loop. World creation, rendering, and validation are outside the timer. [Native benchmark receipt](evidence/native.json)
 
 | Scheduler | Median per replay | p95 per replay | Neighbor pairs visited |
 | --- | ---: | ---: | ---: |
@@ -114,3 +118,10 @@ Run `python tools/playtest.py --channel chromium` to complete both quarry orders
 Run `python tools/escape-playtest.py --drive-through` to hold the throttle through the gate and check the win on the far side. Run `python tools/yard-playtest.py` to load and dispatch both trucks with the on-screen controls, dig in the dunes, measure 240 frames and check the stress replay. Both scripts accept `--browser firefox` and `--url` for testing the published game.
 
 Run `python tools/haul-recovery.py` to drive into a parked truck with a loaded bucket, recover the excavator and finish that delivery.
+
+To compare two builds, save the previous standalone HTML and run the following commands with Python Playwright, Chromium and Pillow installed. Each run records browser main-thread callback time, WebGL buffer traffic, gameplay checkpoints and ten screenshots.
+
+```sh
+python tools/frame-profile.py previous.html .work/frames-before
+python tools/frame-profile.py index.html .work/frames-after --compare .work/frames-before
+```

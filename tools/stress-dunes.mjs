@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 
-const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const html = await readFile(process.argv[2] || new URL('../index.html', import.meta.url), 'utf8');
 const bytes = Buffer.from(html.match(/<script id="wasm"[^>]*>([^<]+)<\/script>/)[1], 'base64');
 const { instance } = await WebAssembly.instantiate(bytes);
 const sim = instance.exports;

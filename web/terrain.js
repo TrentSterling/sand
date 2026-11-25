@@ -9,6 +9,34 @@ const N = 256,
 export function createGround(scene) {
   const geometry = new THREE.PlaneGeometry((N - 1) * SCALE, (N - 1) * SCALE, N - 1, N - 1);
   geometry.rotateX(-Math.PI / 2);
+  // Keep the original triangle order, but place a tile's vertices next to
+  // each other in GPU memory. Updating two distant slips no longer uploads
+  // every vertex between them on the same row.
+  const slot = new Uint16Array(N * N);
+  // The planar grid coordinates stay resident. Only height and normal travel
+  // together during a cut, in both the colour pass and the shadow pass.
+  const surface = new THREE.InterleavedBuffer(new Float32Array(N * N * 4), 4);
+  surface.setUsage(THREE.DynamicDrawUsage);
+  const positions = geometry.attributes.position, uv = geometry.attributes.uv;
+  const grid = new Float32Array(positions.array.length);
+  const orderedUV = new Float32Array(uv.array.length);
+  for (let z = 0; z < N; z++) {
+    for (let x = 0; x < N; x++) {
+      const i = z * N + x;
+      const j = ((z >> 4) * TILES + (x >> 4)) * SIDE * SIDE + (z & 15) * SIDE + (x & 15);
+      slot[i] = j;
+      grid[j * 3] = positions.getX(i);
+      grid[j * 3 + 2] = positions.getZ(i);
+      orderedUV[j * 2] = uv.getX(i);
+      orderedUV[j * 2 + 1] = uv.getY(i);
+    }
+  }
+  const gridIndices = geometry.index.array;
+  for (let i = 0; i < gridIndices.length; i++) gridIndices[i] = slot[gridIndices[i]];
+  geometry.setAttribute('uv', new THREE.BufferAttribute(orderedUV, 2));
+  geometry.setAttribute('position', new THREE.BufferAttribute(grid, 3));
+  geometry.setAttribute('sandHeight', new THREE.InterleavedBufferAttribute(surface, 1, 0));
+  geometry.setAttribute('normal', new THREE.InterleavedBufferAttribute(surface, 3, 1));
   // Keep the seeded bank as a surface reference. Exposed strata and newly
   // deposited loose material follow the actual cut in any direction.
   const bankDatum = new THREE.BufferAttribute(new Float32Array(N * N), 1);
@@ -20,25 +48,27 @@ export function createGround(scene) {
   let seededDatum = false,
     escape = false;
   const rock = new Int16Array(N * N);
-  const pos = geometry.attributes.position,
-    normal = geometry.attributes.normal;
-  pos.setUsage(THREE.DynamicDrawUsage);
-  normal.setUsage(THREE.DynamicDrawUsage);
   geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 24);
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96 });
   const mask = new Uint8Array(TILES * TILES);
   const activeMap = new THREE.DataTexture(mask, TILES, TILES, THREE.RedFormat);
   activeMap.needsUpdate = true;
   const inspect = { value: 0 };
+  function displacedVertex(source) {
+    return 'attribute float sandHeight;\n' + source.replace(
+      '#include <begin_vertex>',
+      '#include <begin_vertex>\ntransformed.y = sandHeight;',
+    );
+  }
   material.onBeforeCompile = (shader) => {
     shader.uniforms.activeMap = { value: activeMap };
     shader.uniforms.inspect = inspect;
     shader.uniforms.trackFrame = trackFrame;
     shader.vertexShader =
       'attribute float bankDatum; attribute float packedSoil; varying float density; varying float bankChange; varying vec3 quarryPoint;\n' +
-      shader.vertexShader.replace(
-        '#include <begin_vertex>',
-        '#include <begin_vertex>\ndensity=packedSoil; quarryPoint = position; bankChange=position.y-bankDatum;',
+      displacedVertex(shader.vertexShader).replace(
+        '#include <project_vertex>',
+        'density=packedSoil; quarryPoint = transformed; bankChange=transformed.y-bankDatum;\n#include <project_vertex>',
       );
     shader.fragmentShader =
       `varying vec3 quarryPoint; varying float bankChange; varying float density; uniform mat4 trackFrame; uniform sampler2D activeMap; uniform float inspect;
@@ -83,6 +113,10 @@ export function createGround(scene) {
       );
   };
   const mesh = new THREE.Mesh(geometry, material);
+  mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  mesh.customDepthMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = displacedVertex(shader.vertexShader);
+  };
   mesh.receiveShadow = mesh.castShadow = true;
   scene.add(mesh);
   // Same world-space material on both sides of the CPU grid boundary.
@@ -101,6 +135,7 @@ export function createGround(scene) {
   const apronGeom = new THREE.BufferGeometry(),
     indices = [];
   apronGeom.setAttribute('packedSoil', new THREE.BufferAttribute(new Uint8Array(8), 1, true));
+  apronGeom.setAttribute('sandHeight', new THREE.BufferAttribute(new Float32Array(8), 1));
   apronGeom.setAttribute('bankDatum', new THREE.BufferAttribute(new Float32Array(8), 1));
   for (let i = 0; i < 4; i++) {
     const j = (i + 1) % 4;
@@ -113,20 +148,55 @@ export function createGround(scene) {
   apron.receiveShadow = true;
   scene.add(apron);
 
-  const lo = new Int16Array(N),
-    hi = new Int16Array(N);
+  const depths = new Int32Array(N * N);
+  const pending = new Uint8Array(N * N), normals = new Uint16Array(N * N);
+  let normalCount = 0, memory, flags, heights, compact;
+  function needNormal(i) {
+    if (pending[i]) return;
+    pending[i] = 1;
+    normals[normalCount++] = i;
+  }
+  // Store one contiguous upload interval per tile and per GPU buffer.
+  function tileUploads(attribute, stride) {
+    const first = new Int32Array(TILES * TILES).fill(N * N);
+    const last = new Int32Array(TILES * TILES).fill(-1);
+    return {
+      mark(j) {
+        const t = j >> 8;
+        if (j < first[t]) first[t] = j;
+        if (j > last[t]) last[t] = j;
+      },
+      flush() {
+        let count = 0;
+        for (let t = 0; t < last.length; t++) {
+          if (last[t] < 0) continue;
+          const n = (last[t] - first[t] + 1) * stride;
+          attribute.addUpdateRange(first[t] * stride, n);
+          count += n;
+          first[t] = N * N;
+          last[t] = -1;
+        }
+        if (count) attribute.needsUpdate = true;
+        return count * attribute.array.BYTES_PER_ELEMENT;
+      },
+    };
+  }
+  const surfaceChanges = tileUploads(surface, 4), packingChanges = tileUploads(packed, 1);
   function sync(core, world) {
-    const memory = core.memory.buffer;
-    const flags = new Uint8Array(memory, core.world_dirty(world), TILES * TILES);
-    const heights = new Int32Array(memory, core.world_height(world), N * N);
-    const compact = new Uint8Array(memory, core.world_compact(world), N * N);
-    if (!seededDatum) {
+    const firstSync = !seededDatum;
+    if (firstSync || memory !== core.memory.buffer) {
+      memory = core.memory.buffer;
+      flags = new Uint8Array(memory, core.world_dirty(world), TILES * TILES);
+      heights = new Int32Array(memory, core.world_height(world), N * N);
+      compact = new Uint8Array(memory, core.world_compact(world), N * N);
+    }
+    if (firstSync) {
       for (let i = 0; i < heights.length; i++) {
         rock[i] =
           escape && onDeck(((i % N) + 0.5) * SCALE - 16, ((i >> 8) + 0.5) * SCALE - 16)
             ? Math.round(deckTop(((i % N) + 0.5) * SCALE - 16) * 1000) - 8
             : 0;
-        bankDatum.array[i] = (rock[i] + heights[i]) * 0.001;
+        bankDatum.array[slot[i]] = (rock[i] + heights[i]) * 0.001;
       }
       bankDatum.needsUpdate = true;
       seededDatum = true;
@@ -143,44 +213,44 @@ export function createGround(scene) {
       }
       if (changed) activeMap.needsUpdate = true;
     }
-    const depth = (i) => rock[i] + heights[i] - ((heights[i] * compact[i]) >> 11);
-    lo.fill(N);
-    hi.fill(-1);
-    for (let tile = 0; tile < flags.length; tile++) {
-      if (!flags[tile]) continue;
-      const x = (tile % TILES) * SIDE,
-        z = (tile >> 4) * SIDE;
-      for (let row = Math.max(0, z - 1); row < Math.min(N, z + SIDE + 1); row++) {
-        lo[row] = Math.min(lo[row], Math.max(0, x - 1));
-        hi[row] = Math.max(hi[row], Math.min(N - 1, x + SIDE));
+    if (!flags.includes(1)) return 0;
+    for (let t = 0; t < flags.length; t++) {
+      if (!flags[t]) continue;
+      const x0 = (t % TILES) * SIDE, z0 = (t >> 4) * SIDE;
+      let j = t * SIDE * SIDE;
+      for (let z = z0; z < z0 + SIDE; z++) {
+        let i = z * N + x0;
+        for (let x = x0; x < x0 + SIDE; x++, i++, j++) {
+          const density = compact[i], mm = rock[i] + heights[i] - ((heights[i] * density) >> 11);
+          if (packed.array[j] !== density) {
+            packed.array[j] = density;
+            packingChanges.mark(j);
+          }
+          if (depths[i] === mm && !firstSync) continue;
+          depths[i] = mm;
+          surface.array[j * 4] = mm * 0.001;
+          surfaceChanges.mark(j);
+          needNormal(x > 0 ? i - 1 : i);
+          needNormal(x < N - 1 ? i + 1 : i);
+          needNormal(z > 0 ? i - N : i);
+          needNormal(z < N - 1 ? i + N : i);
+        }
       }
     }
-    let bytes = 0;
-    for (let z = 0; z < N; z++) {
-      if (hi[z] < lo[z]) continue;
-      for (let x = lo[z]; x <= hi[z]; x++) {
-        const i = z * N + x;
-        const nx =
-          (depth(z * N + Math.max(0, x - 1)) - depth(z * N + Math.min(N - 1, x + 1))) * 0.004;
-        const nz =
-          (depth(Math.max(0, z - 1) * N + x) - depth(Math.min(N - 1, z + 1) * N + x)) * 0.004;
-        const inv = 1 / Math.hypot(nx, 1, nz);
-        packed.array[i] = compact[i];
-        pos.setY(i, depth(i) * 0.001);
-        normal.setXYZ(i, nx * inv, inv, nz * inv);
-      }
-      const start = (z * N + lo[z]) * 3,
-        count = (hi[z] - lo[z] + 1) * 3;
-      pos.addUpdateRange(start, count);
-      normal.addUpdateRange(start, count);
-      packed.addUpdateRange(start / 3, count / 3);
-      bytes += count * 8 + count / 3;
+    for (let k = 0; k < normalCount; k++) {
+      const i = normals[k], x = i % N, j = slot[i], start = j * 4 + 1;
+      pending[i] = 0;
+      const nx = (depths[x ? i - 1 : i] - depths[x < N - 1 ? i + 1 : i]) * 0.004;
+      const nz = (depths[i >= N ? i - N : i] - depths[i < N * (N - 1) ? i + N : i]) * 0.004;
+      const inv = 1 / Math.hypot(nx, 1, nz);
+      surface.array[start] = nx * inv;
+      surface.array[start + 1] = inv;
+      surface.array[start + 2] = nz * inv;
+      surfaceChanges.mark(j);
     }
-    if (bytes) {
-      pos.needsUpdate = normal.needsUpdate = packed.needsUpdate = true;
-      core.world_clear_dirty(world);
-    }
-    return bytes;
+    normalCount = 0;
+    core.world_clear_dirty(world);
+    return surfaceChanges.flush() + packingChanges.flush();
   }
   return {
     sync,

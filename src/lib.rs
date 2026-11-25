@@ -31,6 +31,9 @@ pub struct Grain {
 
 pub struct World {
     height: Vec<i32>,
+    // One compacted surface per column, shared by slope comparisons and tyres.
+    // Runtime edits refresh the touched column in wake().
+    surface_mm: Vec<i32>,
     compact: Vec<u8>,
     base: Vec<i32>,
     in_bay: Vec<bool>,
@@ -69,6 +72,7 @@ impl World {
     pub fn new(dense: bool) -> Self {
         let mut w = Self {
             height: vec![0; CELLS],
+            surface_mm: vec![0; CELLS],
             compact: vec![0; CELLS],
             base: vec![0; CELLS],
             in_bay: vec![false; CELLS],
@@ -109,6 +113,7 @@ impl World {
                 w.initial += w.height[i] as i64;
             }
         }
+        w.seed_surfaces();
         w
     }
     pub fn avalanche(dense: bool) -> Self {
@@ -127,9 +132,11 @@ impl World {
                 }
             }
         }
+        w.seed_surfaces();
         w
     }
     fn wake(&mut self, i: usize) {
+        self.surface_mm[i] = self.compacted_surface(i);
         let t = tile(i);
         self.dirty[t] = 1;
         self.next[t] = 5;
@@ -170,7 +177,15 @@ impl World {
     }
     #[inline]
     fn mm(&self, i: usize) -> i32 {
+        self.surface_mm[i]
+    }
+    fn compacted_surface(&self, i: usize) -> i32 {
         self.base[i] + self.height[i] - ((self.height[i] * self.compact[i] as i32) >> 11)
+    }
+    fn seed_surfaces(&mut self) {
+        for i in 0..CELLS {
+            self.surface_mm[i] = self.compacted_surface(i);
+        }
     }
     pub fn tracks(&mut self, x: f32, z: f32, yaw: f32) {
         self.track_contact(x, z, yaw, [f32::NEG_INFINITY, 0., 0.]);
@@ -581,11 +596,13 @@ impl World {
             let (xs, zs, offset) = if axis == 0 { (2, 1, 1) } else { (1, 2, N) };
             let xend = (x0 + TILE).min(N - usize::from(axis == 0));
             let zend = (z0 + TILE).min(N - usize::from(axis == 1));
-            for z in (z0 + usize::from(axis == 1) * parity..zend).step_by(zs) {
-                for x in (x0 + usize::from(axis == 0) * parity..xend).step_by(xs) {
+            let start_x = x0 + usize::from(axis == 0) * parity;
+            let start_z = z0 + usize::from(axis == 1) * parity;
+            self.visited += (xend - start_x).div_ceil(xs) * (zend - start_z).div_ceil(zs);
+            for z in (start_z..zend).step_by(zs) {
+                for x in (start_x..xend).step_by(xs) {
                     let i = z * N + x;
                     self.pair(i, i + offset);
-                    self.visited += 1;
                 }
             }
         }
@@ -594,12 +611,7 @@ impl World {
                 let gx = ((x + 16.) * 8. - 0.5).clamp(0., 254.999);
                 let gz = ((z + 16.) * 8. - 0.5).clamp(0., 254.999);
                 let i = gz as usize * N + gx as usize;
-                let h = |i: usize| {
-                    (self.base[i] + self.height[i]
-                        - ((self.height[i] * self.compact[i] as i32) >> 11))
-                        as f32
-                        * 0.001
-                };
+                let h = |i: usize| self.surface_mm[i] as f32 * 0.001;
                 let (u, v) = (gx.fract(), gz.fract());
                 if u + v <= 1. {
                     (1. - u - v) * h(i) + u * h(i + 1) + v * h(i + N)
@@ -702,6 +714,7 @@ pub extern "C" fn escape_new(
             w.initial += i64::from(w.height[i]);
         }
     }
+    w.seed_surfaces();
     Box::into_raw(Box::new(w))
 }
 #[no_mangle]
@@ -728,6 +741,7 @@ pub extern "C" fn dunes_new(dense: u32) -> *mut World {
             }
         }
     }
+    w.seed_surfaces();
     Box::into_raw(Box::new(w))
 }
 /// Move existing sand into a steep windrow once a second during the stress replay.
@@ -765,6 +779,7 @@ pub extern "C" fn haul_new(dense: i32) -> *mut World {
             }
         }
     }
+    world.seed_surfaces();
     Box::into_raw(Box::new(world))
 }
 
@@ -1263,6 +1278,7 @@ mod tests {
     fn a_symmetric_full_bucket_cut_pushes_on_both_cheeks() {
         let mut w = World::new(false);
         w.height.fill(600);
+        w.seed_surfaces();
         w.load = CAPACITY;
         let before = w.height.clone();
         w.tool(-4., 0.2, -5., 0., 0.5);
@@ -1292,6 +1308,7 @@ mod tests {
             w.height[i] = 800;
             w.initial += 800;
         }
+        w.seed_surfaces();
         w.tool(-15.8, 0.25, -6., 0., 0.5);
         w.tool(-15.95, 0.25, -6., 0., 0.5);
         assert!(w.load > 0 && w.height[row] < 800);

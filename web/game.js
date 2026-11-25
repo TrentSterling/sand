@@ -148,6 +148,7 @@ async function start() {
   }
   function finishEscape() {
     exit.clearMarks();
+    requestPaint();
     stallSide = '';
     done = true;
     finishTime = Math.max(1, Math.round((frame - (startFrame ?? 0)) / 60));
@@ -314,7 +315,18 @@ async function start() {
               ? 'Build a 1.50 m³ stockpile inside the ring'
               : 'Free dig · open quarry';
   let framing = 1;
+  let repaint = true;
+  const requestPaint = () => {
+    repaint = true;
+  };
+  controls.addEventListener('change', requestPaint);
+  renderer.domElement.addEventListener('webglcontextrestored', () => {
+    renderer.shadowMap.needsUpdate = true;
+    requestPaint();
+  });
+  document.addEventListener('visibilitychange', requestPaint);
   function resize(home = false) {
+    requestPaint();
     const width = innerWidth,
       height = innerHeight,
       aspect = width / height;
@@ -528,6 +540,7 @@ async function start() {
     orderTime = clock;
     done = false;
     marked.visible = job === 1;
+    requestPaint();
     byId('goal').textContent = targetText();
     byId('nextJob').hidden = true;
     note(
@@ -1008,6 +1021,7 @@ async function start() {
         deckReached = true;
         stallSide = '';
         exit.clearMarks();
+        requestPaint();
         byId('missionBrief').textContent =
           'Both tracks aboard. Stop here or drive through the striped gate.';
         note(
@@ -1035,6 +1049,7 @@ async function start() {
           : 0;
       if (stallTicks === 40) {
         stallSide = exit.markStall(chassis, ground);
+        requestPaint();
         const hint =
           stallSide === 'both'
             ? 'Both tracks stalled. Reverse and fill the orange crosses.'
@@ -1111,9 +1126,9 @@ async function start() {
           '°.',
       );
     }
-    byId('simTime').textContent = (simMs / Math.max(1, renderTicks)).toFixed(3) + ' ms';
-    byId('visited').textContent = visits.toLocaleString() + ' / 65,536';
     if (!byId('lab').hidden) {
+      byId('simTime').textContent = (simMs / Math.max(1, renderTicks)).toFixed(3) + ' ms';
+      byId('visited').textContent = visits.toLocaleString() + ' / 65,536';
       byId('massError').textContent = core.world_balance(w) + ' units';
       byId('upload').textContent = (uploadBytes / 1024).toFixed(1) + ' KiB';
       byId('meshTime').textContent = terrainMs.toFixed(2) + ' ms';
@@ -1384,12 +1399,18 @@ async function start() {
     byId(id).onclick = () => switchYard(name);
   byId('helpToggle').onclick = () => togglePanels('help');
   byId('labToggle').onclick = () => togglePanels('lab');
-  byId('forces').onclick = () =>
-    byId('forces').setAttribute('aria-pressed', String(contactView.toggle()));
+  let showForces = false, showTiles = false;
+  byId('forces').onclick = () => {
+    showForces = contactView.toggle();
+    byId('forces').setAttribute('aria-pressed', String(showForces));
+    requestPaint();
+  };
   byId('tiles').onclick = () => {
     const on = byId('tiles').getAttribute('aria-pressed') !== 'true';
     byId('tiles').setAttribute('aria-pressed', String(on));
     terrain.inspect(on);
+    showTiles = on;
+    requestPaint();
   };
   byId('manual').onclick = () => setManual(!manual);
   byId('cutView').onclick = toggleCutView;
@@ -1397,6 +1418,7 @@ async function start() {
     dragTarget = null;
     dragId = null;
     targetMarker.visible = false;
+    requestPaint();
     if (sideView) note('Drag to place the teeth. Hold R to curl or F to tip.');
   }
   function toggleCutView() {
@@ -1660,6 +1682,7 @@ async function start() {
   reset();
   window.addEventListener('resize', () => resize());
   let sinceHud = 0;
+  let hadTransient = false;
   function display(ms) {
     const wallTime = lastNow ? (ms - lastNow) / 1000 : step,
       dt = Math.min(0.12, wallTime);
@@ -1689,8 +1712,15 @@ async function start() {
       );
     if (sideView) frameCutView();
     else controls.update();
-    contactView.update(ground);
-    renderer.render(scene, camera);
+    // Physics, input and the HUD keep their clocks while the compositor holds
+    // a settled image. Paint one last frame when a stream or marker disappears.
+    const transient = !!(core.world_air_len(w) || markerSpot || dragTarget || showForces || showTiles || sideView);
+    if (repaint || renderer.shadowMap.needsUpdate || transient || hadTransient) {
+      contactView.update(ground);
+      renderer.render(scene, camera);
+      repaint = false;
+    }
+    hadTransient = transient;
     frameSum += wallTime;
     frameCount++;
     sinceHud += dt;
