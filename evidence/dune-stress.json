@@ -1,0 +1,25 @@
+{
+  "runtime": "v24.22.1",
+  "initialSandM3": 2062.315875,
+  "representedSandTonnes": 3299.7054,
+  "grid": [
+    256,
+    256
+  ],
+  "ticks": 900,
+  "landslides": 15,
+  "repeats": 7,
+  "batchTicks": 30,
+  "active": {
+    "medianReplayMs": 92.87,
+    "p95BatchMs": 4.164,
+    "pairs": 23656496
+  },
+  "dense": {
+    "medianReplayMs": 102.943,
+    "p95BatchMs": 4.188,
+    "pairs": 29376000
+  },
+  "hash": "9057c33d",
+  "massError": 0
+}

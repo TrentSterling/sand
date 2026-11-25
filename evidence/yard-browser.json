@@ -1,0 +1,45 @@
+{
+  "build": "0.5.0",
+  "source": "Standalone release, Windows desktop, 1280 x 800",
+  "browser": "chromium",
+  "version": "147.0.7727.15",
+  "truckCycles": [
+    2,
+    3
+  ],
+  "deliveredM3": [
+    1.018625,
+    1.4031875
+  ],
+  "truckReplay": {
+    "source": "Your dig",
+    "initialM3": 40.25090625,
+    "ticks": 3600,
+    "sparseMs": 5.400000333786011,
+    "denseMs": 275.60000014305115,
+    "pairs": [
+      654592,
+      117504000
+    ],
+    "match": true,
+    "liveMatch": null,
+    "massError": 0
+  },
+  "duneStress": {
+    "source": "Dune field stress test",
+    "initialM3": 2062.315875,
+    "ticks": 900,
+    "sparseMs": 124.09999966621399,
+    "denseMs": 140.30000066757202,
+    "pairs": [
+      23656496,
+      29376000
+    ],
+    "match": true,
+    "liveMatch": null,
+    "massError": 0
+  },
+  "frames": 240,
+  "medianFrameMs": 16.69999999999709,
+  "p95FrameMs": 16.80000000000291
+}

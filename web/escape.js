@@ -3,6 +3,8 @@ import * as T from 'three';
 export const escapeYard = {
   lip: 5.25,
   far: 15.5,
+  roadEnd: 23.3,
+  gateX: 11.8,
   halfWidth: 2.55,
   height: 0.72,
   bevelRun: 0.5,
@@ -159,7 +161,7 @@ export function createExit(scene) {
     new T.PlaneGeometry(1.79, 0.62),
     new T.MeshStandardMaterial({ map: tex, roughness: 0.85 }),
   );
-  const gateX = lip + 6.55;
+  const gateX = escapeYard.gateX;
   sign.position.set(gateX, h + 1.68, -w + 0.18);
   sign.rotation.y = -0.58;
   group.add(sign);
@@ -173,17 +175,19 @@ export function createExit(scene) {
   barrier.position.set(gateX, h + 0.81, -w + 0.18);
   group.add(barrier);
   const bar = new T.Mesh(cube, white);
-  bar.position.z = w - 0.18;
+  const plank = new T.Group();
+  plank.position.z = w - 0.18;
+  barrier.add(plank);
   bar.scale.set(0.13, 0.16, w * 2 - 0.36);
   bar.castShadow = true;
-  barrier.add(bar);
+  plank.add(bar);
   const stripes = new T.InstancedMesh(cube, mat(0xa44127), 6);
   for (let i = 0; i < 6; i++)
     stripes.setMatrixAt(
       i,
-      new T.Matrix4().makeScale(0.145, 0.166, 0.34).setPosition(0, 0, 0.32 + i * 0.78),
+      new T.Matrix4().makeScale(0.145, 0.166, 0.34).setPosition(0, 0, 0.32 + i * 0.78 - (w - 0.18)),
     );
-  barrier.add(stripes);
+  plank.add(stripes);
   const lampMat = new T.MeshBasicMaterial({ color: 0xffa333 });
   const lamp = new T.Mesh(new T.SphereGeometry(0.1, 10, 7), lampMat);
   lamp.position.set(gateX - 0.16, h + 1.2, -w + 0.18);
@@ -213,6 +217,7 @@ export function createExit(scene) {
   });
   return {
     group,
+    plank,
     markStall(body, ground) {
       const samples = [-1, 1].map((side) => {
         let front = null;
@@ -239,6 +244,10 @@ export function createExit(scene) {
     reset() {
       this.clearMarks();
       openness = 0;
+      barrier.add(plank);
+      plank.position.set(0, 0, w - 0.18);
+      plank.quaternion.identity();
+      plank.visible = true;
       barrier.rotation.x = 0;
       lampMat.color.setHex(0xffa333);
     },

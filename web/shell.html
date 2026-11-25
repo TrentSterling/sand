@@ -22,13 +22,13 @@
       <nav class="instruments" aria-label="Operator tools">
         <span id="fps" class="frame-rate" aria-label="Frame rate">… fps</span>
         <button id="labToggle" aria-controls="lab" aria-expanded="false">CPU lab</button>
-        <button id="helpToggle" aria-controls="help" aria-expanded="false">Help</button>
+        <button id="helpToggle" aria-controls="help" aria-expanded="false">Jobs / Help</button>
       </nav>
     </header>
 
     <section class="work-order" aria-label="Current job">
       <h2 id="goal">Build your way out</h2>
-      <p id="missionBrief">Build a sand ramp. Park both tracks on the flagged exit deck.</p>
+      <p id="missionBrief">Build a sand ramp. Park on the deck or drive through the striped gate.</p>
       <div id="rampReadings" aria-label="Sand height at the concrete lip"><span>Left <b id="leftSand">0 cm</b></span><span>Right <b id="rightSand">0 cm</b></span></div>
       <p id="finishResult" hidden></p>
       <button id="retry" class="primary" hidden>Try fewer scoops</button>
@@ -53,7 +53,7 @@
         <div><dt>Terrain upload</dt><dd id="upload">…</dd></div>
         <div><dt>Draw calls</dt><dd id="draws">…</dd></div>
       </dl>
-      <label class="replay-select">Replay <select id="scenario"><option value="player">My dig</option><option value="reference">Reference dig</option><option value="avalanche">Quarry-wide avalanche</option></select></label>
+      <label class="replay-select">Replay <select id="scenario"><option value="player">My dig</option><option value="reference">Reference dig</option><option value="avalanche">Quarry-wide avalanche</option><option value="dunes">Dune field stress test</option></select></label>
       <button id="bench" class="primary">Compare sparse / dense</button>
       <output id="benchResult" aria-live="polite"></output>
       <button id="forces" aria-pressed="false" title="Show the center of mass and normal forces under the tracks">Track forces</button>
@@ -64,6 +64,10 @@
 
     <aside id="help" class="panel" aria-labelledby="helpTitle" hidden>
       <h2 id="helpTitle">Operator guide</h2>
+      <div class="yard-list" aria-label="Choose a job">
+        <button id="escapeJob">Build your way out</button><button id="switchYard">Quarry orders</button>
+        <button id="truckJob">Truck loading</button><button id="duneJob">Dune field</button>
+      </div>
       <p id="yardGuide">Tap the bank for a bucketful, then tap the ground to place it. Choose Half pour to save sand for a second spot. An orange cross marks where a track stalled.</p>
       <dl class="keymap">
         <div><dt>Escape job</dt><dd>Tap sand to scoop, then tap to place. Drive with the arrows.</dd></div>
@@ -77,7 +81,7 @@
         <div><dt>Cut view</dt><dd>Drag the teeth in side view. Hold R or F to change the lip angle.</dd></div>
       </dl>
       <div class="panel-actions">
-        <button id="switchYard">Quarry orders</button><button id="offline">Download offline</button><button id="reset">Restart job</button><button id="audio">Sound off</button>
+        <button id="offline">Download offline</button><button id="reset">Restart job</button><button id="audio">Sound off</button>
       </div>
     </aside>
 

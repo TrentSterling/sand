@@ -1,5 +1,6 @@
 import { escapeYard, onDeck, deckTop } from './escape.js';
 import { WEIGH_BAY } from './quarry.js';
+import { fleet } from './trucks.js';
 
 // Read the same cell-centred triangles the terrain renderer uploads. The
 // collider needs height and gradient together for each rigid shoe contact.
@@ -38,8 +39,10 @@ export function driveGround(core, world, escape = false) {
       out.ny = 1;
       return;
     }
-    const bevelSlope = sandOnDeck && x < escapeYard.lip + escapeYard.bevelRun
-      ? escapeYard.bevelRise / escapeYard.bevelRun : 0;
+    const bevelSlope =
+      sandOnDeck && x < escapeYard.lip + escapeYard.bevelRun
+        ? escapeYard.bevelRise / escapeYard.bevelRun
+        : 0;
     const dx = (h(x - 0.13, z) - h(x + 0.13, z)) / 0.26 - bevelSlope,
       dz = (h(x, z - 0.13) - h(x, z + 0.13)) / 0.26;
     const inv = 1 / Math.hypot(dx, 1, dz);
@@ -59,18 +62,60 @@ const escapeWalls = [
   ...walls,
   [
     escapeYard.lip,
-    escapeYard.far,
+    escapeYard.roadEnd,
     -escapeYard.halfWidth,
     escapeYard.halfWidth,
     escapeYard.height,
     true,
   ],
 ];
+const haulWalls = [...walls];
+const truckSegments = [];
+for (const t of fleet) {
+  const start = haulWalls.length;
+  const l = t.length / 2,
+    w = t.width / 2,
+    floor = t.floor;
+  haulWalls.push([t.x - l, t.x + l, t.z - w, t.z + w, floor]);
+  for (const s of [-1, 1]) {
+    haulWalls.push([
+      t.x - l - 0.06,
+      t.x + l + 0.06,
+      t.z + s * w - 0.09,
+      t.z + s * w + 0.09,
+      floor + 0.75,
+    ]);
+    haulWalls.push([t.x + s * l - 0.09, t.x + s * l + 0.09, t.z - w, t.z + w, floor + 0.75]);
+  }
+  const cab = t.x + t.heading * (l + (t === fleet[1] ? 1.36 : 0.85));
+  haulWalls.push([cab - 0.59, cab + 0.59, t.z - 0.78, t.z + 0.78, 2.35]);
+  const hood = cab + t.heading * 1.15;
+  haulWalls.push([hood - 0.65, hood + 0.65, t.z - 0.78, t.z + 0.78, 1.65]);
+  truckSegments.push(
+    haulWalls.slice(start).map((wall) => ({ wall, left: wall[0], right: wall[1] })),
+  );
+}
+export function positionTruckWalls(core, w) {
+  truckSegments.forEach((segments, i) => {
+    const dx = core.world_truck_offset(w, i);
+    for (const segment of segments) {
+      segment.wall[0] = segment.left + dx;
+      segment.wall[1] = segment.right + dx;
+    }
+  });
+}
+export const haulClearance = (x, y, z, n) => yardClearance(x, y, z, n, haulWalls);
 export function yardClearance(x, y, z, n, obstacles = walls) {
   // Low perimeter stops constrain the crawlers while leaving the elevated
   // attachment free to overhang the edge of the playable yard.
-  let best = Math.max(y - 0.65, 15.55 - Math.max(Math.abs(x), Math.abs(z)));
-  if (best === y - 0.65) n.set(0, 1, 0);
+  const serviceRoad =
+    obstacles === escapeWalls && x > escapeYard.lip && Math.abs(z) <= escapeYard.halfWidth;
+  const edge = serviceRoad
+    ? Math.min(escapeYard.roadEnd - x, 15.55 - Math.abs(z))
+    : 15.55 - Math.max(Math.abs(x), Math.abs(z));
+  const top = serviceRoad ? escapeYard.height + 0.55 : 0.65;
+  let best = Math.max(y - top, edge);
+  if (best === y - top) n.set(0, 1, 0);
   else if (Math.abs(x) > Math.abs(z)) n.set(-Math.sign(x), 0, 0);
   else n.set(0, 0, -Math.sign(z));
   for (const [left, right, near, far, top = bay.height, bevel = false] of obstacles) {

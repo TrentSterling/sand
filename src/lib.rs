@@ -1,4 +1,6 @@
 //! Fixed-step dry sand in integer height units. One unit is 1 mm over a 125 mm square.
+mod haul;
+use haul::TruckBed;
 
 pub const N: usize = 256;
 const TILE: usize = 16;
@@ -35,6 +37,7 @@ pub struct World {
     next: [u8; T * T],
     dirty: [u8; T * T],
     air: Vec<Grain>,
+    beds: Vec<TruckBed>,
     phase: usize,
     pub load: i32,
     pub bay: i32,
@@ -72,6 +75,7 @@ impl World {
             next: [0; T * T],
             dirty: [1; T * T],
             air: Vec::with_capacity(MAX_AIR),
+            beds: Vec::new(),
             phase: 0,
             load: 0,
             bay: 0,
@@ -584,10 +588,14 @@ impl World {
                 }
             }
         }
+        for bed in &mut self.beds {
+            bed.drive();
+        }
         let mut k = 0;
         while k < self.air.len() {
             let mut p = self.air[k];
             let prev = (p.x, p.z);
+            let old_y = p.y;
             p.vy -= 9.81 * DT;
             p.x += p.vx * DT;
             p.y += p.vy * DT;
@@ -599,6 +607,10 @@ impl World {
                 continue;
             }
             let i = b as usize * N + a as usize;
+            if self.beds.iter_mut().any(|bed| bed.catch(&p, old_y)) {
+                self.air.swap_remove(k);
+                continue;
+            }
             if p.y <= self.surface(p.x, p.z) {
                 let (ax, az) = (cell(prev.0), cell(prev.1));
                 let prior = if inside(ax) && inside(az) {
@@ -623,6 +635,7 @@ impl World {
         self.height.iter().map(|&v| v as i64).sum::<i64>()
             + self.load as i64
             + self.lost as i64
+            + self.beds.iter().map(|bed| i64::from(bed.mass)).sum::<i64>()
             + self.air.iter().map(|p| p.mass as i64).sum::<i64>()
             - self.initial
     }
@@ -677,6 +690,76 @@ pub extern "C" fn escape_new(
 #[no_mangle]
 pub extern "C" fn avalanche_new(dense: u32) -> *mut World {
     Box::into_raw(Box::new(World::avalanche(dense != 0)))
+}
+#[no_mangle]
+pub extern "C" fn dunes_new(dense: u32) -> *mut World {
+    let mut w = World::new(dense != 0);
+    w.initial = 0;
+    w.bay = 0;
+    for z in 0..N {
+        for x in 0..N {
+            let i = z * N + x;
+            let (px, pz) = (coord(x), coord(z));
+            let ridge = (px * 0.61 + (pz * 0.27).sin() * 1.7).sin();
+            let waves = 2.5 + ridge * 1.8 + (pz * 0.74 - px * 0.18).cos() * 0.65;
+            let clearing = ((px.hypot(pz) - 2.6) * 0.83).max(0.);
+            let toe = ((15.94 - px.abs().max(pz.abs())) * 1.65).max(0.);
+            w.height[i] = w.height[i].max((waves.min(clearing).min(toe) * 1000.) as i32);
+            w.initial += i64::from(w.height[i]);
+            if w.in_bay[i] {
+                w.bay += w.height[i];
+            }
+        }
+    }
+    Box::into_raw(Box::new(w))
+}
+/// Move existing sand into a steep windrow once a second during the stress replay.
+#[no_mangle]
+pub extern "C" fn dune_stress_step(w: &mut World, frame: u32) {
+    if frame.is_multiple_of(60) {
+        let col = 4 + (frame as usize / 60 * 17) % 224;
+        for row in 2..N - 2 {
+            for dx in 0..10 {
+                let i = row * N + col + dx;
+                let mass = w.height[i].min(1250);
+                if mass > 0 {
+                    w.change(i, -mass);
+                    w.change(i + 11, mass);
+                }
+            }
+        }
+    }
+    w.tick();
+}
+#[no_mangle]
+pub extern "C" fn world_add_truck(
+    w: &mut World,
+    x: f32,
+    z: f32,
+    half_x: f32,
+    half_z: f32,
+    floor: f32,
+    order: i32,
+    heading: f32,
+) {
+    w.beds
+        .push(TruckBed::new(x, z, half_x, half_z, floor, order, heading));
+}
+#[no_mangle]
+pub extern "C" fn world_truck_offset(w: &World, index: usize) -> f32 {
+    w.beds[index].offset
+}
+#[no_mangle]
+pub extern "C" fn world_truck_load(w: &World, index: usize) -> i32 {
+    w.beds[index].mass
+}
+#[no_mangle]
+pub extern "C" fn world_truck_bins(w: &World, index: usize) -> *const i32 {
+    w.beds[index].bins.as_ptr()
+}
+#[no_mangle]
+pub extern "C" fn world_initial_m3(w: &World) -> f64 {
+    w.initial as f64 / 64000.
 }
 /// # Safety
 /// Pass a live handle from one of the world constructors exactly once.
@@ -799,6 +882,12 @@ pub extern "C" fn world_hash(w: &World) -> u32 {
     for v in [w.load, w.bay, w.lost] {
         h = (h ^ (v as u32)).wrapping_mul(16777619);
     }
+    for bed in &w.beds {
+        h = (h ^ bed.dispatch_ticks).wrapping_mul(16777619);
+        for &v in &bed.bins {
+            h = (h ^ v as u32).wrapping_mul(16777619);
+        }
+    }
     for p in &w.air {
         for v in [
             p.x.to_bits(),
@@ -848,6 +937,62 @@ pub extern "C" fn replay_step(w: &mut World, frame: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn truck_counts_impacts_inside_its_bed_and_carries_its_payload_away() {
+        let mut w = World::new(false);
+        world_add_truck(&mut w, -5., -5., 1.5, 1., 1.35, 900, 1.);
+        for (x, y, z, mass) in [
+            (-5., 3., -5., 1100),
+            (-5., 3., -3.4, 700),
+            (-5., 0.7, -5., 300),
+        ] {
+            w.air.push(Grain {
+                x,
+                y,
+                z,
+                mass,
+                ..Default::default()
+            });
+            w.initial += i64::from(mass);
+        }
+        for _ in 0..600 {
+            w.tick();
+        }
+        assert_eq!(w.beds[0].mass, 1100);
+        assert_eq!(w.beds[0].bins.iter().sum::<i32>(), 1100);
+        assert!((w.beds[0].offset - 5.8).abs() < 0.001);
+        for x in [-5., 0.8] {
+            w.air.push(Grain {
+                x,
+                y: 3.,
+                z: -5.,
+                mass: 200,
+                ..Default::default()
+            });
+            w.initial += 200;
+        }
+        for _ in 0..150 {
+            w.tick();
+        }
+        assert_eq!(w.beds[0].mass, 1300);
+        assert_eq!(w.balance(), 0);
+    }
+    #[test]
+    fn dune_windrows_conserve_the_whole_site_and_replay_identically() {
+        // Both handles are owned by this test.
+        let mut sparse = unsafe { Box::from_raw(dunes_new(0)) };
+        let mut dense = unsafe { Box::from_raw(dunes_new(1)) };
+        assert!(world_initial_m3(&sparse) > 2000.);
+        for frame in 0..900 {
+            dune_stress_step(&mut sparse, frame);
+            dune_stress_step(&mut dense, frame);
+            if frame % 60 == 59 {
+                assert_eq!(world_hash(&sparse), world_hash(&dense));
+            }
+        }
+        assert_eq!(sparse.balance(), 0);
+        assert_eq!(dense.balance(), 0);
+    }
     #[test]
     fn shoe_pressure_compacts_and_slip_berms_conserve_material() {
         let mut tiled = World::new(false);

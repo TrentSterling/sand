@@ -12,6 +12,7 @@ cli.add_argument("--url", default=(ROOT / "index.html").as_uri())
 cli.add_argument("--browser", choices=["chromium", "firefox", "chrome"], default="chromium")
 cli.add_argument("--out", type=Path, default=ROOT / ".work/escape-play")
 cli.add_argument("--touch", action="store_true")
+cli.add_argument("--drive-through", action="store_true", help="Hold manual travel through the exit arm")
 args = cli.parse_args()
 if args.touch and args.browser == "firefox":
     cli.error("The sustained touch-input test requires Chromium.")
@@ -86,14 +87,14 @@ with sync_playwright() as pw:
     advance(18)
 
     # The desktop picks are on the bank face and at the foot of the left track.
-    if args.touch:
+    if args.touch or args.drive_through:
         press("#borrow")
     else:
         page.mouse.click(595, 261)
     finish_action()
     load = state()["load"]
     assert load > 8000, load
-    if args.touch:
+    if args.touch or args.drive_through:
         press("#placeLeft")
     else:
         page.mouse.click(717, 425)
@@ -111,10 +112,37 @@ with sync_playwright() as pw:
     advance(48)
     both = readings()
     assert both[1] > clean[1] + 10, (clean, both)
+    if args.drive_through:
+        # Build up both lanes again before testing the gate at speed.
+        for placement in ("#placeLeft", "#placeRight"):
+            press("#borrow")
+            finish_action()
+            press(placement)
+            finish_action()
+            advance(48)
+        both = readings()
+    expected_scoops = 4 if args.drive_through else 2
     page.screenshot(path=args.out / "built.png")
-    drive_until(lambda: page.wait_for_function("sandLab.state().done", timeout=42000))
+    if args.drive_through:
+        # Approach straight up the player-built ramp. Take over before the parking zone.
+        try:
+            drive_until(lambda: page.wait_for_function("sandLab.state().base.x >= 6.7", timeout=42000))
+            press("#manual")
+            page.keyboard.down("ArrowUp")
+            page.wait_for_function("sandLab.state().done && sandLab.state().base.x > 16.2", timeout=42000)
+            assert state()["gateBroken"] and state()["propHits"] > 0
+            assert not state()["stallSide"] and "made it out" in page.locator("#goal").inner_text()
+        except Exception:
+            page.screenshot(path=args.out / "drive-through-failure.png")
+            print(state(), flush=True)
+            raise
+        finally:
+            page.keyboard.up("ArrowUp")
+    else:
+        drive_until(lambda: page.wait_for_function("sandLab.state().done", timeout=42000))
     end = state()
-    assert end["scoops"] == 2 and end["massError"] == 0 and abs(end["chassis"]["speed"]) < .1, end
+    assert end["scoops"] == expected_scoops and end["massError"] == 0, end
+    assert (abs(end["chassis"]["speed"]) > .1) == args.drive_through, end
     advance(85)
     page.screenshot(path=args.out / "escaped.png")
 
@@ -129,7 +157,7 @@ with sync_playwright() as pw:
 
     press("#retry")
     assert not state()["done"] and state()["scoops"] == 0
-    assert "2 scoop" in page.locator("#finishResult").inner_text()
+    assert f"{expected_scoops} scoop" in page.locator("#finishResult").inner_text()
     press("#borrow")
     finish_action()
     advance(18)
@@ -149,13 +177,14 @@ with sync_playwright() as pw:
 
     page.reload()
     page.wait_for_function("window.sandLab?.state().frame>10")
-    assert "2 scoop" in page.locator("#finishResult").inner_text()
+    assert f"{expected_scoops} scoop" in page.locator("#finishResult").inner_text()
     press("#helpToggle")
     press("#switchYard")
     assert state()["job"] == 0 and state()["yard"] == "quarry"
     assert not errors, errors
     receipt = {
         "url": args.url, "browser": args.browser, "version": browser.version, "touch": args.touch,
+        "droveThrough":args.drive_through,"gateBroken":end["gateBroken"],"propHits":end["propHits"],
         "firstLoadM3": load / 64000, "bareStopX": failed["base"]["x"],
         "lipHeightCm": {"initial": clean, "leftOnly": left, "both": both},
         "finishSeconds": end["finishTime"], "scoops": end["scoops"],

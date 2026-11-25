@@ -1,8 +1,10 @@
 # SandLab
 
-The exit deck stands just above the excavator's tracks. Take a bite out of the bank, pour sand against the concrete lip, and try driving up what you built. The gate lifts when both tracks are on the deck and the machine comes to a stop.
+The exit deck stands just above the excavator's tracks. Take a bite out of the bank, pour sand against the concrete lip, and drive up what you built. Park on the deck for a clean exit, or keep the throttle down and take the striped arm with you. Both finishes count.
 
 **[Play Build Your Way Out on GitHub Pages](https://tront.xyz/sand/)** · [Open the quarry orders](https://tront.xyz/sand/?yard=quarry) · [Download the standalone HTML](https://github.com/TrentSterling/sand/raw/refs/heads/main/index.html)
+
+**[Load the trucks](https://tront.xyz/sand/?yard=haul)** · **[Dig in the dune field](https://tront.xyz/sand/?yard=dunes)**
 
 [Watch the driving crest test](https://tront.xyz/sand/review/drive/) · [Compare the original and revised excavator from 15 angles](https://tront.xyz/sand/review/) · [Read the blind reviews and mechanical results](GAUNTLET.md)
 
@@ -14,17 +16,27 @@ Tap a spot on the bank to cut there. With sand in the bucket, tap the spot where
 
 Hold **Drive to exit** to line up with the deck, or steer the tracks yourself. Your browser remembers the fewest scoops you escaped with. A faster run breaks a tie.
 
+## Truck dispatch and dune field
+
+Load **Cherry Picker**, a red long-nose highway tipper, with 0.85 m³. Its bed catches sand where it lands. Watch the pile grow and the suspension settle. When the truck has its order, its light turns green and it rolls out with the load. **Mule Six**, the teal six-wheel quarry dumper, takes 1.25 m³. A wide swing can spill a perfectly good scoop onto the ground. Cones, oil drums and a loose tyre can be knocked around by the excavator and the departing trucks. Turn sound on in Help to hear the send-off.
+
+The **Dune field** is a free-dig yard with 2,062 m³ of movable sand. Open the CPU lab there and run **Dune field stress test** to trigger 15 landslides over 900 simulation ticks. On the development PC the shipped WASM took a median **92.87 ms** per complete replay with active tiles and **102.94 ms** scanning the full grid, over seven paired repetitions in Node. Both produced the same terrain and conserved every unit of sand. [Reproduce the measurements](tools/stress-dunes.mjs) · [Timing receipt](evidence/dune-stress.json)
+
+![The red road tipper, teal quarry dumper, broken exit gate and sand-heavy dune field captured in the game](evidence/yard-shift.webp)
+
+The standalone Chromium playtest filled the tippers in two and three scoops respectively. While digging in the dunes at 1280 × 800, the browser recorded 16.7 ms median and 16.8 ms p95 between animation frames across 240 frames. [Browser playtest receipt](evidence/yard-browser.json)
+
 ## In the operator seat
 
 | Control | Action |
 | --- | --- |
 | **1, 2, 3** in the escape job | Scoop at the bank or place at the left or right track approach. Tap the ground for a custom cut or pour. |
-| **1, 2, 3, 4** in quarry orders | Dig, lift, swing to the delivery point, dump. The soil solver decides how much the bucket picks up and where it lands. |
+| **1, 2, 3, 4** in quarry orders and truck dispatch | Dig, lift, swing to the delivery point, dump. The soil solver decides how much the bucket picks up and where it lands. |
 | **W / S**, **E / D**, **R / F** | Raise / lower boom, extend / draw the stick, curl / tip the bucket. The first joint input switches to manual. |
 | **Q / A**, **arrow keys** | Slew the upper house, or drive and steer the tracks. |
 | **Double-click terrain in manual** | Position the cutting edge at a reachable point using two-link inverse kinematics. |
 | **Cut view** | Look across the pin axes and drag the teeth through the bank with a mouse or finger. Hold R or F to adjust the bucket pitch while dragging. The cursor changes colour when the teeth fall short. |
-| **Drag / scroll or pinch** | Orbit and zoom. The manual panel also has hold controls for touch. |
+| **Drag / scroll or pinch** | Orbit and zoom. Open Manual to see the bound key on each hold button or to operate the machine by touch. |
 | **CPU lab** | Pause, single-step, show track forces and centre of mass, show awake terrain tiles, or replay the same inputs through two CPU schedulers. |
 | **Help** | Toggle engine sound, reset the quarry, or save the one-file offline build. |
 
@@ -83,8 +95,11 @@ cargo run --locked --release --bin bench
 node tools/verify-machine.mjs
 node tools/verify-controls.mjs
 node tools/verify-drive.mjs
+node tools/stress-dunes.mjs
 ```
 
 For browser verification, install Python Playwright and its Chromium browser. Run `python tools/escape-playtest.py` for a mouse and keyboard escape, a metered two-spot pour, a retry and a saved best. Add `--touch` to drive using a phone-sized touch viewport. Run `node tools/gauntlet-build.mjs candidate` followed by `python tools/escape-gauntlet.py` for the matched zero-, one-, two- and four-load approaches. [Drive comparison](evidence/escape.json)
 
 Run `python tools/playtest.py --channel chromium` to complete both quarry orders, compare the solvers and open the downloaded build with network requests blocked. Run `python tools/drive-playtest.py` with Chrome for the keyboard crest test. Run `python tools/inspect-machine.py` for the orthographic model review.
+
+Run `python tools/escape-playtest.py --drive-through` to hold the throttle through the gate and check the win on the far side. Run `python tools/yard-playtest.py` to load and dispatch both trucks with the on-screen controls, dig in the dunes, measure 240 frames and check the stress replay. Both scripts accept `--browser firefox` and `--url` for testing the published game.

@@ -4,7 +4,15 @@ import { carrierClearance, createMachine, machineDimensions } from './machine.js
 import { armIK, forward, toolAttitude } from './arm.js';
 import { createExit, escapeYard, newEscapeWorld, parkOnDeck } from './escape.js';
 import { createCrawler } from './crawler.js';
-import { driveGround, yardClearance, escapeClearance } from './drive-ground.js';
+import {
+  driveGround,
+  yardClearance,
+  escapeClearance,
+  haulClearance,
+  positionTruckWalls,
+} from './drive-ground.js';
+import { fleet, createFleet, addTruckBeds } from './trucks.js';
+import { createLooseProps } from './props.js';
 import { createContactView } from './contact-view.js';
 import { createQuarry } from './quarry.js';
 import { createGround, createStream } from './terrain.js';
@@ -77,6 +85,9 @@ async function start() {
   scene.add(rig.root);
   const chassis = createCrawler();
   const exit = createExit(scene);
+  const yardProps = createLooseProps(scene, exit);
+  let trucks = null;
+  const truckOffsets = new Float32Array(fleet.length);
   const placeTarget = new THREE.Mesh(
     new THREE.RingGeometry(0.23, 0.3, 36),
     new THREE.MeshBasicMaterial({
@@ -92,7 +103,17 @@ async function start() {
   scene.add(placeTarget);
   const rampLeft = { x: escapeYard.lip - 0.49, z: -1.08 },
     rampRight = { x: escapeYard.lip - 0.49, z: 1.08 };
-  let escapeMode = new URLSearchParams(location.search).get('yard') !== 'quarry';
+  const requestedYard = new URLSearchParams(location.search).get('yard');
+  let yard = ['quarry', 'haul', 'dunes'].includes(requestedYard) ? requestedYard : 'escape';
+  let escapeMode = yard === 'escape',
+    deckReached = false;
+  function createWorld(dense) {
+    if (escapeMode) return newEscapeWorld(core, dense);
+    if (yard === 'dunes') return core.dunes_new(dense);
+    const handle = core.world_new(dense);
+    if (yard === 'haul') addTruckBeds(core, handle);
+    return handle;
+  }
   let scoops = 0,
     tookLoad = false,
     startFrame = null,
@@ -102,7 +123,7 @@ async function start() {
     markerSpot = null,
     stallTicks = 0,
     brakingOnDeck = false;
-  const brief = 'Build a sand ramp. Park both tracks on the flagged exit deck.';
+  const brief = 'Build a ramp. Park on the flagged deck or drive through the gate.';
   let splitNext = false,
     stallSide = '';
   const bestKey = 'sandlab.escape.v1';
@@ -144,10 +165,10 @@ async function start() {
       ? 'Personal best'
       : 'Best: ' + past.scoops + ' scoops in ' + past.seconds + ' s';
     byId('finishResult').hidden = false;
-    byId('nextJob').textContent = 'Quarry orders';
+    byId('nextJob').textContent = 'Load the trucks';
     byId('nextJob').hidden = false;
     byId('retry').hidden = false;
-    note('Both tracks are on the exit deck.');
+    note(yardProps.broken ? 'You made it. The gate has resigned.' : 'Both tracks made it out.');
   }
   let slewRate = 0;
   const contactView = createContactView(scene, chassis);
@@ -238,7 +259,12 @@ async function start() {
     travel = 0,
     selected = '',
     sound = null;
-  const destination = () => (job === 1 ? berm : bay);
+  const destination = () =>
+    yard === 'haul'
+      ? { x: fleet[job].x + core.world_truck_offset(w, job), z: fleet[job].z }
+      : job === 1
+        ? berm
+        : bay;
   function markAmount() {
     const height = new Int32Array(core.memory.buffer, core.world_height(w), 256 * 256);
     let sum = 0;
@@ -249,16 +275,21 @@ async function start() {
       }
     return sum;
   }
-  const massHere = () => (job === 1 ? markAmount() : core.world_bay(w));
-  const goal = () => (job === 0 ? 0.75 : 1.5);
+  const massHere = () =>
+    yard === 'haul' ? core.world_truck_load(w, job) : job === 1 ? markAmount() : core.world_bay(w);
+  const goal = () => (yard === 'haul' ? fleet[job].order : job === 0 ? 0.75 : 1.5);
   const targetText = () =>
     escapeMode
       ? 'Build your way out'
-      : job === 0
-        ? 'Deliver 0.75 m³ to the weigh bay'
-        : job === 1
-          ? 'Build a 1.50 m³ stockpile inside the ring'
-          : 'Free dig · open quarry';
+      : yard === 'haul'
+        ? 'Load ' + fleet[job].name + ' · ' + fleet[job].order.toFixed(2) + ' m³'
+        : yard === 'dunes'
+          ? 'Dune field · free dig'
+          : job === 0
+            ? 'Deliver 0.75 m³ to the weigh bay'
+            : job === 1
+              ? 'Build a 1.50 m³ stockpile inside the ring'
+              : 'Free dig · open quarry';
   let framing = 1;
   function resize(home = false) {
     const width = innerWidth,
@@ -351,9 +382,17 @@ async function start() {
     }
     if (w) core.world_drop(w);
     if (sideView) toggleCutView();
-    w = escapeMode ? newEscapeWorld(core, 0) : core.world_new(0);
+    w = createWorld(0);
+    if (yard === 'haul' && !trucks) trucks = createFleet(scene);
+    if (yard === 'haul') positionTruckWalls(core, w);
+    if (trucks) {
+      trucks.group.visible = yard === 'haul';
+      trucks.reset();
+    }
     exit.group.visible = escapeMode;
     exit.reset();
+    yardProps.reset(ground);
+    deckReached = false;
     terrain.reset(escapeMode);
     sampleDrive = driveGround(core, w, escapeMode);
     shoeEvents.fill(null);
@@ -361,7 +400,7 @@ async function start() {
     base = { x: 0, y: 0, z: 0 };
     trackYaw = 0;
     travel = 0;
-    job = escapeMode ? -1 : 0;
+    job = escapeMode ? -1 : yard === 'dunes' ? 2 : 0;
     done = false;
     orderTime = 0;
     clock = 0;
@@ -386,15 +425,35 @@ async function start() {
     if (best)
       byId('finishResult').textContent =
         'Best: ' + best.scoops + ' scoops in ' + best.seconds + ' s';
-    byId('quantityLabel').textContent = escapeMode ? 'Scoops' : 'Delivered';
-    byId('missionBrief').hidden = !escapeMode;
+    byId('quantityLabel').textContent = escapeMode
+      ? 'Scoops'
+      : yard === 'haul'
+        ? 'Truck payload'
+        : yard === 'dunes'
+          ? 'Sand on site'
+          : 'Delivered';
+    byId('missionBrief').hidden = yard === 'quarry';
     stallSide = '';
-    byId('missionBrief').textContent = brief;
-    byId('switchYard').textContent = escapeMode ? 'Quarry orders' : 'Build your way out';
+    byId('missionBrief').textContent = escapeMode
+      ? brief
+      : yard === 'haul'
+        ? 'Pick up a load, swing above the red tipper, then dump into its open bed.'
+        : 'Dig anywhere. Open CPU lab to stress the dunes with repeated landslides.';
     byId('yardGuide').textContent = escapeMode
       ? 'Tap the bank for a bucketful, then tap the ground to place it. Choose Half pour to save sand for a second spot. An orange cross marks where a track stalled.'
-      : 'Dig into the bank, lift, swing to the weigh bay and dump. Complete both orders to unlock free dig.';
-    byId('switchYard').disabled = false;
+      : yard === 'haul'
+        ? 'Use Dig, Lift, Swing and Dump to load each waiting truck. Land sand inside the bed to earn payload.'
+        : yard === 'dunes'
+          ? 'Explore the dunes, or compare both soil schedulers under repeated landslides in the CPU lab.'
+          : 'Dig into the bank, lift, swing to the weigh bay and dump. Complete both orders to unlock free dig.';
+    for (const [id, name] of Object.entries({
+      escapeJob: 'escape',
+      switchYard: 'quarry',
+      truckJob: 'haul',
+      duneJob: 'dunes',
+    }))
+      byId(id).disabled = yard === name;
+    byId('scenario').value = yard === 'dunes' ? 'dunes' : 'player';
     window.sandLab.lastBenchmark = null;
     p = { ...armIK(5.82, 2.65, -0.74), yaw: 0 };
     if (escapeMode) p.yaw = -Math.atan2(escapeYard.bank.z, escapeYard.bank.x);
@@ -420,7 +479,22 @@ async function start() {
   function nextJob() {
     if (busy || !done || job >= 2) return;
     if (escapeMode) {
-      switchYard();
+      switchYard('haul');
+      return;
+    }
+    if (yard === 'haul') {
+      if (job === 1) {
+        switchYard('dunes');
+        return;
+      }
+      job = 1;
+      done = false;
+      byId('nextJob').hidden = true;
+      byId('goal').textContent = targetText();
+      byId('missionBrief').textContent =
+        'Swing around to the teal six-wheeler. Its order is ' + goal().toFixed(2) + ' m³.';
+      note('Mule Six is next. Mind the mirrors.');
+      hud();
       return;
     }
     job++;
@@ -437,9 +511,16 @@ async function start() {
     );
     hud();
   }
-  function switchYard() {
+  function switchYard(name) {
     if (busy) return;
-    escapeMode = !escapeMode;
+    yard = name;
+    escapeMode = yard === 'escape';
+    if (location.protocol === 'https:' || location.protocol === 'http:') {
+      const url = new URL(location.href);
+      if (escapeMode) url.searchParams.delete('yard');
+      else url.searchParams.set('yard', yard);
+      history.replaceState(null, '', url);
+    }
     byId('help').hidden = byId('lab').hidden = true;
     for (const name of ['help', 'lab'])
       byId(name + 'Toggle').setAttribute('aria-expanded', 'false');
@@ -486,25 +567,30 @@ async function start() {
         goals = [make(start.r, Math.max(start.h, 2.9), 0.44, start.yaw, 58)];
         note('Curling the bucket and lifting clear.');
         break;
-      case 'swing':
+      case 'swing': {
+        const clearance = yard === 'haul' ? 4.25 : 2.65;
         goals = [
-          make(start.r, Math.max(start.h, 2.65), 0.44, start.yaw, 32),
+          make(start.r, Math.max(start.h, clearance), 0.44, start.yaw, yard === 'haul' ? 68 : 32),
           make(
             dest.r,
-            2.65,
+            clearance,
             0.44,
             dest.yaw,
             Math.max(100, Math.ceil(Math.abs(angleDelta(start.yaw, dest.yaw)) * dest.r * 22)),
           ),
         ];
+        if (yard === 'haul') goals.push(make(dest.r, fleet[job].floor + 1.45, 0.44, dest.yaw, 55));
         note(
           escapeMode
             ? 'Carrying the load to your mark.'
-            : job === 1
-              ? 'Slewing to the stockpile ring.'
-              : 'Slewing to the weigh bay.',
+            : yard === 'haul'
+              ? 'Swinging over ' + fleet[job].name + '.'
+              : job === 1
+                ? 'Slewing to the stockpile ring.'
+                : 'Slewing to the weigh bay.',
         );
         break;
+      }
       case 'dump': {
         const splitting = escapeMode && splitNext;
         const angle = splitting ? core.half_pour_pitch(core.world_load(w)) : -1.22;
@@ -637,7 +723,7 @@ async function start() {
         if (action === 'dump' && !done) {
           if (escapeMode && stallSide)
             byId('missionBrief').textContent =
-              'Test the repaired approach. Park both tracks on the deck.';
+              'Test the repaired approach. Park on the deck or drive through the gate.';
           note(
             escapeMode
               ? load >= 180
@@ -773,6 +859,7 @@ async function start() {
   }
   function tick() {
     const prev = forward(p);
+    const previousX = base.x;
     const previousPose = { ...p };
     trackMoved = false;
     if (sequence.length) animateArm();
@@ -806,7 +893,7 @@ async function start() {
       driveInput,
       steerInput,
       sampleDrive,
-      escapeMode ? escapeClearance : yardClearance,
+      escapeMode ? escapeClearance : yard === 'haul' ? haulClearance : yardClearance,
     );
     drove ||= !!(driveInput || steerInput);
     chassisMs += performance.now() - bodyStart;
@@ -828,6 +915,30 @@ async function start() {
     }
     core.world_tool(w, tip.x, tip.y, tip.z, yaw, pitch);
     core.world_tick(w);
+    const gateWasBroken = yardProps.broken,
+      oldHits = yardProps.hits;
+    if (yard === 'haul')
+      for (let i = 0; i < fleet.length; i++) truckOffsets[i] = core.world_truck_offset(w, i);
+    if (
+      yardProps.tick(
+        rig,
+        tip,
+        ground,
+        step,
+        escapeMode,
+        frame,
+        yard === 'haul' ? truckOffsets : null,
+      )
+    )
+      renderer.shadowMap.needsUpdate = true;
+    if (!gateWasBroken && yardProps.broken) {
+      note('Gate inspection complete. Replacement required.');
+      playSignal('snap');
+    } else if (yardProps.hits > oldHits) playSignal('clonk');
+    if (yard === 'haul' && trucks.tick(core, w, step)) {
+      positionTruckWalls(core, w);
+      renderer.shadowMap.needsUpdate = true;
+    }
     simMs += performance.now() - now;
     renderTicks++;
     const penetration = Math.max(0, core.world_ground(w, tip.x, tip.z) - tip.y);
@@ -849,13 +960,28 @@ async function start() {
       }
       if (carried < 64) tookLoad = false;
       parkTicks = base.x > escapeYard.lip && parkOnDeck(chassis) ? parkTicks + 1 : 0;
-      if (parkTicks === 5)
+      if (parkTicks > 0 && !deckReached) {
+        deckReached = true;
+        stallSide = '';
+        exit.clearMarks();
+        byId('missionBrief').textContent =
+          'Both tracks aboard. Stop here or drive through the striped gate.';
         note(
           manual
-            ? 'Both tracks aboard. Release travel to park.'
+            ? 'Keep driving through the gate, or release travel to park.'
             : 'Both tracks aboard. Braking on the exit deck.',
         );
-      if (parkTicks >= 24 && Math.abs(chassis.speed) < 0.1) finishEscape();
+      }
+      if (deckReached && base.x < escapeYard.lip - 2) {
+        deckReached = false;
+        byId('missionBrief').textContent = brief;
+      }
+      const crossed =
+        previousX < escapeYard.gateX &&
+        base.x >= escapeYard.gateX &&
+        base.y > escapeYard.height - 0.14 &&
+        Math.abs(base.z) < escapeYard.halfWidth - 0.7;
+      if (crossed || (parkTicks >= 24 && Math.abs(chassis.speed) < 0.1)) finishEscape();
       stallTicks =
         driveInput > 0 &&
         base.x > escapeYard.lip - 2.45 &&
@@ -904,7 +1030,9 @@ async function start() {
     const qty = Math.max(0, markMass - targetBase);
     byId('delivered').textContent = escapeMode
       ? String(scoops)
-      : fmt(job === 2 ? core.world_bay(w) : qty);
+      : yard === 'dunes'
+        ? Math.round(core.world_initial_m3(w)).toLocaleString() + ' m³'
+        : fmt(job === 2 ? core.world_bay(w) : qty);
     byId('rampReadings').hidden = !escapeMode || done;
     if (escapeMode && !done) {
       exit.refreshMarks(ground);
@@ -964,6 +1092,18 @@ async function start() {
     ) {
       done = true;
       byId('nextJob').hidden = false;
+      if (yard === 'haul') {
+        byId('goal').textContent = fleet[job].name + ' is loaded.';
+        byId('missionBrief').textContent = fmt(qty) + ' landed in the bed.';
+        byId('nextJob').textContent = job === 0 ? 'Load Mule Six' : 'Open the dune field';
+        note(
+          job === 0
+            ? 'One honk means thanks. Two means there is sand in the cab.'
+            : 'Both loads weighed in. The dispatch radio is finally quiet.',
+        );
+        playSignal('horn');
+        return;
+      }
       byId('nextJob').textContent = job === 0 ? 'Next order' : 'Free dig';
       note(
         'Order complete in ' + Math.floor(clock - orderTime) + ' s. ' + fmt(qty) + ' delivered.',
@@ -980,17 +1120,20 @@ async function start() {
       dense = 0;
     try {
       const scenario = byId('scenario').value;
+      const dunes = scenario === 'dunes';
       const avalanche = scenario === 'avalanche',
         actual = scenario === 'player' && savedMotion > 30 && (maxLoad > 100 || drove),
         make = avalanche
           ? core.avalanche_new
-          : actual && escapeMode
-            ? (dense) => newEscapeWorld(core, dense)
-            : core.world_new;
+          : dunes
+            ? core.dunes_new
+            : actual
+              ? createWorld
+              : core.world_new;
       sparse = make(0);
       dense = make(1);
 
-      const frames = actual ? Math.min(frame, 3600) : avalanche ? 360 : 720;
+      const frames = actual ? Math.min(frame, 3600) : dunes ? 900 : avalanche ? 360 : 720;
       const times = [0, 0],
         pairs = [0, 0],
         handles = [sparse, dense];
@@ -1026,7 +1169,8 @@ async function start() {
                 replay[j + 4],
               );
               core.world_tick(handle);
-            } else if (avalanche) core.world_tick(handle);
+            } else if (dunes) core.dune_stress_step(handle, f);
+            else if (avalanche) core.world_tick(handle);
             else core.replay_step(handle, f);
             pairs[h] += core.world_visited(handle);
           }
@@ -1044,7 +1188,14 @@ async function start() {
       const liveMatch =
         actual && frame <= 3600 ? core.world_hash(sparse) === core.world_hash(w) : null;
       const result = {
-        source: actual ? 'Your dig' : avalanche ? 'Quarry-wide avalanche' : 'Reference dig',
+        source: actual
+          ? 'Your dig'
+          : dunes
+            ? 'Dune field stress test'
+            : avalanche
+              ? 'Quarry-wide avalanche'
+              : 'Reference dig',
+        initialM3: core.world_initial_m3(sparse),
         ticks: frames,
         sparseMs: times[0],
         denseMs: times[1],
@@ -1080,6 +1231,29 @@ async function start() {
         pendingReset = false;
         reset();
       }
+    }
+  }
+  function playSignal(kind) {
+    if (!sound) return;
+    const ctx = sound.ctx,
+      now = ctx.currentTime;
+    for (const delay of kind === 'horn' ? [0, 0.24] : [0]) {
+      const osc = ctx.createOscillator(),
+        vol = ctx.createGain(),
+        at = now + delay;
+      osc.type = kind === 'horn' ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(kind === 'horn' ? 205 : kind === 'snap' ? 640 : 170, at);
+      osc.frequency.exponentialRampToValueAtTime(kind === 'horn' ? 192 : 52, at + 0.12);
+      vol.gain.setValueAtTime(0.001, at);
+      vol.gain.exponentialRampToValueAtTime(0.065, at + 0.007);
+      vol.gain.exponentialRampToValueAtTime(0.001, at + 0.17);
+      osc.connect(vol).connect(ctx.destination);
+      osc.start(at);
+      osc.stop(at + 0.18);
+      osc.onended = () => {
+        osc.disconnect();
+        vol.disconnect();
+      };
     }
   }
   function audioToggle() {
@@ -1142,7 +1316,13 @@ async function start() {
     note(splitNext ? 'Pick the first spot for half the load.' : 'Pick a spot for the full load.');
   };
   byId('retry').onclick = () => reset();
-  byId('switchYard').onclick = switchYard;
+  for (const [id, name] of Object.entries({
+    escapeJob: 'escape',
+    switchYard: 'quarry',
+    truckJob: 'haul',
+    duneJob: 'dunes',
+  }))
+    byId(id).onclick = () => switchYard(name);
   byId('helpToggle').onclick = () => togglePanels('help');
   byId('labToggle').onclick = () => togglePanels('lab');
   byId('forces').onclick = () =>
@@ -1346,7 +1526,12 @@ async function start() {
   window.sandLab = {
     state: () => ({
       frame,
-      yard: escapeMode ? 'escape' : 'quarry',
+      yard,
+      gateBroken: yardProps.broken,
+      propHits: yardProps.hits,
+      initialM3: core.world_initial_m3(w),
+      truckLoads: yard === 'haul' ? fleet.map((_, i) => core.world_truck_load(w, i)) : [],
+      truckTravel: yard === 'haul' ? fleet.map((_, i) => core.world_truck_offset(w, i)) : [],
       scoops,
       finishTime,
       parkTicks,

@@ -531,21 +531,7 @@ export function createQuarry(T, scene) {
     box(civil, -8.2, 0.31, z, 0.44, 0.62, 2.35, concrete);
     box(civil, -8.2, 0.65, z, 0.24, 0.065, 2.3, red);
   }
-  // Survey stakes and cones mark the edge; the playable patch stays clear.
-  function marker(x, z) {
-    box(civil, x, 0.042, z, 0.36, 0.084, 0.36, dark);
-    cone(civil, x, 0.28, z, 0.028, 0.145, 0.45, red, 10);
-    cone(civil, x, 0.3, z, 0.062, 0.087, 0.085, topStone, 10);
-  }
-  for (const [x, z] of [
-    [-7.9, -5.4],
-    [-7.2, -5.3],
-    [-6.7, -5.2],
-    [9.2, -5.45],
-    [10, -5.44],
-    [10.8, -5.4],
-  ])
-    marker(x, z);
+  // Fixed survey stakes mark the edge of the yard.
   for (const [x, z] of [
     [-9, 5.8],
     [-9, 8.7],
