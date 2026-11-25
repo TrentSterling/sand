@@ -106,7 +106,15 @@ body:has(#manualPanel:not([hidden])) #assistPanel { display: none; }
 .manual-controls legend { margin-bottom: .2rem; padding: 0; }
 .manual-controls fieldset > div, .panel-actions { display: flex; gap: .25rem; }
 .manual-controls button, .panel-actions button { flex: 1 1 0; }
-.manual-controls button { min-height: 33px; padding: .3rem .2rem; touch-action: none; }
+.manual-controls button {
+  display: flex; align-items: center; justify-content: center; gap: .32rem;
+  min-height: 33px; padding: .3rem .2rem; touch-action: none;
+}
+.manual-controls kbd {
+  display: inline-grid; place-items: center; min-width: 1.15rem; height: 1rem; padding: 0 .15rem;
+  border: 1px solid #707767; border-radius: 3px; background: var(--panel); color: var(--muted);
+  font: 600 .69rem/1 var(--mono); pointer-events: none;
+}
 
 .panel {
   position: absolute; z-index: 3; top: calc(var(--safe-top) + 51px); right: max(var(--gutter), env(safe-area-inset-right));
@@ -165,6 +173,9 @@ body:has(#manualPanel:not([hidden])) #assistPanel { display: none; }
   .work-order { max-width: 230px; min-width: 0; padding: .5rem .7rem; }
   .manual-controls { grid-template-columns: repeat(6,minmax(0,1fr)); gap: .3rem; }
   .manual-controls button { font-size: .75rem; }
+}
+@media (max-width: 500px), (max-height: 500px) {
+  .manual-controls button { flex-direction: column; gap: .14rem; }
 }
 
 #missionBrief,#finishResult{max-width:28ch;font-size:.88rem;color:var(--muted);margin:.3rem 0}

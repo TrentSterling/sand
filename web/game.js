@@ -676,6 +676,17 @@ async function start() {
     ArrowLeft: 'steerLeft',
     ArrowRight: 'steerRight',
   };
+  const arrowCaps = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
+  for (const [code, action] of Object.entries(keyMap)) {
+    const button = byId('manualPanel').querySelector(`[data-hold="${action}"]`);
+    const key = code.replace(/^Key/, '');
+    const cap = document.createElement('kbd');
+    cap.textContent = arrowCaps[code] ?? key;
+    cap.setAttribute('aria-hidden', 'true');
+    button.setAttribute('aria-keyshortcuts', key);
+    button.title = 'Hold ' + key.replace(/^Arrow(.+)$/, '$1 Arrow');
+    button.append(cap);
+  }
   function held(key) {
     if (keyHeld.has(key)) return true;
     for (const value of pointerHeld.values()) if (value === key) return true;
